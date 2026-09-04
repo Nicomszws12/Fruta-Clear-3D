@@ -1,4 +1,5 @@
 // src/game/sounds.ts
+import { getSoundVolumeMultiplier } from '../composables/useGameSettings';
 
 let audioCtx: AudioContext | null = null;
 
@@ -14,17 +15,20 @@ export const initAudio = () => {
 
 // Generates a simple tone
 const playTone = (frequency: number, type: OscillatorType, duration: number, vol: number = 0.1, startTimeOffset: number = 0) => {
+    const masterVol = getSoundVolumeMultiplier();
+    if (masterVol <= 0) return;
     if (!audioCtx) return;
 
     const oscillator = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
+    const effectiveVol = vol * masterVol;
 
     oscillator.type = type;
     oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime + startTimeOffset);
 
     // Envelope
     gainNode.gain.setValueAtTime(0, audioCtx.currentTime + startTimeOffset);
-    gainNode.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + startTimeOffset + 0.05); // attack
+    gainNode.gain.linearRampToValueAtTime(effectiveVol, audioCtx.currentTime + startTimeOffset + 0.05); // attack
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTimeOffset + duration); // decay
 
     oscillator.connect(gainNode);
@@ -38,12 +42,15 @@ const playTone = (frequency: number, type: OscillatorType, duration: number, vol
 const audioCache: Record<string, HTMLAudioElement> = {};
 
 const playAudioFile = (path: string, volume = 0.5, fallback?: () => void) => {
+    const masterVol = getSoundVolumeMultiplier();
+    if (masterVol <= 0) return;
+
     try {
         if (!audioCache[path]) {
             audioCache[path] = new Audio(path);
         }
         const sound = audioCache[path].cloneNode() as HTMLAudioElement;
-        sound.volume = volume;
+        sound.volume = Math.min(1, Math.max(0, volume * masterVol));
         sound.play().catch(() => {
             if (fallback) fallback();
         });

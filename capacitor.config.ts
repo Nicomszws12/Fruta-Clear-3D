@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.cecilia.tileclear',
-  appName: 'Tile Clear',
+  appName: 'Fruta Clear 3D',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

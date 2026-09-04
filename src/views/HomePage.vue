@@ -5,12 +5,14 @@ import {
   IonHeader,
   IonToolbar,
   IonContent,
+  alertController,
 } from '@ionic/vue';
 import { useGameState } from '../composables/useGameState';
 import { useFirebase } from '../composables/useFirebase';
 import { getAssetByKey } from '../game/tileAssets';
 import LeaderboardModal from '../components/LeaderboardModal.vue';
 import GameDialog from '../components/GameDialog.vue';
+import SettingsModal from '../components/SettingsModal.vue';
 import { playTap } from '../game/sounds';
 
 // ─── Composables ──────────────────────────────────────────────
@@ -97,6 +99,44 @@ const handleUpdateName = async (newName: string) => {
   }
 };
 
+// ─── Settings Modal State ─────────────────────────────────────
+const isSettingsOpen = ref(false);
+
+const openSettings = () => {
+  playTap();
+  isSettingsOpen.value = true;
+};
+
+const promptEditNameFromSettings = async () => {
+  isSettingsOpen.value = false;
+  const alert = await alertController.create({
+    header: 'Cambiar Apodo ✏️',
+    message: 'Ingresa el nuevo nombre que verán los demás jugadores:',
+    inputs: [
+      {
+        name: 'nameInput',
+        type: 'text',
+        placeholder: 'Tu Apodo',
+        value: username.value,
+        attributes: { maxlength: 18 },
+      },
+    ],
+    buttons: [
+      { text: 'Cancelar', role: 'cancel' },
+      {
+        text: 'Guardar',
+        handler: async (data: Record<string, string>) => {
+          const clean = (data.nameInput || '').trim();
+          if (clean && clean !== username.value) {
+            await handleUpdateName(clean);
+          }
+        },
+      },
+    ],
+  });
+  await alert.present();
+};
+
 // ─── Win / Lose Alerts ────────────────────────────────────────
 watch(gameStatus, async (status) => {
   if (status === 'won') {
@@ -178,6 +218,10 @@ onMounted(async () => {
             <button class="hud-leaderboard-btn" @click="openLeaderboard" title="Tabla de Clasificación">
               <span class="btn-trophy">🏆</span>
               <span class="btn-trophy-text">Top</span>
+            </button>
+
+            <button class="hud-settings-btn" @click="openSettings" title="Ajustes de Juego">
+              <span class="btn-gear">⚙️</span>
             </button>
           </div>
         </div>
@@ -389,6 +433,14 @@ onMounted(async () => {
       @refresh="fetchLeaderboard"
       @update-name="handleUpdateName"
     />
+
+    <!-- ════════ SETTINGS MODAL ════════ -->
+    <SettingsModal
+      :is-open="isSettingsOpen"
+      :username="username"
+      @update:is-open="isSettingsOpen = $event"
+      @edit-name="promptEditNameFromSettings"
+    />
   </ion-page>
 </template>
 
@@ -587,6 +639,30 @@ onMounted(async () => {
   font-weight: 900;
   text-transform: uppercase;
   text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.hud-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #38bdf8;
+  border: 2px solid #0284c7;
+  box-shadow: 0 4px 0 #0369a1;
+  border-radius: 14px;
+  padding: 4px 8px;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.hud-settings-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #0369a1;
+}
+
+.btn-gear {
+  font-size: 14px;
+  line-height: 1;
 }
 
 /* ─── World Subbar ────────────────────────────────────────── */
@@ -1252,6 +1328,9 @@ onMounted(async () => {
     display: none;
   }
   .hud-leaderboard-btn {
+    padding: 4px 6px;
+  }
+  .hud-settings-btn {
     padding: 4px 6px;
   }
   .hud-score-chip {
