@@ -57,11 +57,12 @@ export const TILE_ASSETS: TileAsset[] = [
   { key: 'mushroom',    emoji: '🍄', label: 'Hongo',       category: 'nature' },
 ];
 
+// Pre-indexed map for instant O(1) tile asset lookup
+const ASSET_MAP = new Map<string, TileAsset>(TILE_ASSETS.map(a => [a.key, a]));
+
 /** Look up a tile asset by its type key. Returns a fallback if not found. */
 export function getAssetByKey(key: string): TileAsset {
-  return (
-    TILE_ASSETS.find(a => a.key === key) ?? { key, emoji: '❓', label: key }
-  );
+  return ASSET_MAP.get(key) ?? { key, emoji: '❓', label: key };
 }
 
 /**

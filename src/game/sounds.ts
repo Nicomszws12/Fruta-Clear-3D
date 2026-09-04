@@ -38,25 +38,37 @@ const playTone = (frequency: number, type: OscillatorType, duration: number, vol
     oscillator.stop(audioCtx.currentTime + startTimeOffset + duration);
 };
 
-// Preload / cache Kenney audio objects
-const audioCache: Record<string, HTMLAudioElement> = {};
+// Preload / pool Kenney audio objects
+const audioPool: Record<string, HTMLAudioElement[]> = {};
+const POOL_SIZE = 3;
+
+const getPooledAudio = (path: string): HTMLAudioElement => {
+  if (!audioPool[path]) {
+    audioPool[path] = Array.from({ length: POOL_SIZE }, () => new Audio(path));
+  }
+  const pool = audioPool[path];
+  for (let i = 0; i < pool.length; i++) {
+    if (pool[i].paused || pool[i].ended) {
+      return pool[i];
+    }
+  }
+  return pool[0];
+};
 
 const playAudioFile = (path: string, volume = 0.5, fallback?: () => void) => {
-    const masterVol = getSoundVolumeMultiplier();
-    if (masterVol <= 0) return;
+  const masterVol = getSoundVolumeMultiplier();
+  if (masterVol <= 0) return;
 
-    try {
-        if (!audioCache[path]) {
-            audioCache[path] = new Audio(path);
-        }
-        const sound = audioCache[path].cloneNode() as HTMLAudioElement;
-        sound.volume = Math.min(1, Math.max(0, volume * masterVol));
-        sound.play().catch(() => {
-            if (fallback) fallback();
-        });
-    } catch {
-        if (fallback) fallback();
-    }
+  try {
+    const sound = getPooledAudio(path);
+    sound.volume = Math.min(1, Math.max(0, volume * masterVol));
+    sound.currentTime = 0;
+    sound.play().catch(() => {
+      if (fallback) fallback();
+    });
+  } catch {
+    if (fallback) fallback();
+  }
 };
 
 export const playClick = () => {

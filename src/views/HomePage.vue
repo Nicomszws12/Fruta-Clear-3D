@@ -208,21 +208,22 @@ onMounted(async () => {
             </span>
           </div>
 
-          <!-- Right: Score & Leaderboard Button -->
+          <!-- Right: Score & Action Buttons -->
           <div class="hud-right">
             <div class="hud-score-chip">
               <span class="score-coin">🪙</span>
               <span class="score-val">{{ formatScore(score) }}</span>
             </div>
 
-            <button class="hud-leaderboard-btn" @click="openLeaderboard" title="Tabla de Clasificación">
-              <span class="btn-trophy">🏆</span>
-              <span class="btn-trophy-text">Top</span>
-            </button>
+            <div class="hud-actions">
+              <button class="hud-leaderboard-btn" @click="openLeaderboard" title="Tabla de Clasificación">
+                <span class="btn-trophy">🏆</span>
+              </button>
 
-            <button class="hud-settings-btn" @click="openSettings" title="Ajustes de Juego">
-              <span class="btn-gear">⚙️</span>
-            </button>
+              <button class="hud-settings-btn" @click="openSettings" title="Ajustes de Juego">
+                <span class="btn-gear">⚙️</span>
+              </button>
+            </div>
           </div>
         </div>
       </ion-toolbar>
@@ -458,12 +459,10 @@ onMounted(async () => {
 
 /* ─── Gamer HUD Header ────────────────────────────────────── */
 .game-hud-toolbar {
-  --background: rgba(255, 255, 255, 0.95);
+  --background: rgba(255, 255, 255, 0.98);
   --color: #0f172a;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border-bottom: 3px solid #0284c7;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding-top: env(safe-area-inset-top, 0px);
 }
 
@@ -471,57 +470,62 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  gap: 6px;
+  padding: 4px 8px;
+  gap: 4px;
   width: 100%;
+  max-width: 100vw;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Left Profile */
 .hud-profile {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: #f0f9ff;
-  border: 2px solid #bae6fd;
-  box-shadow: 0 3px 0 #7dd3fc;
-  border-radius: 20px;
-  padding: 3px 8px 3px 4px;
+  border: 1.5px solid #bae6fd;
+  box-shadow: 0 2px 0 #7dd3fc;
+  border-radius: 16px;
+  padding: 2px 6px 2px 3px;
   cursor: pointer;
-  transition: transform 0.12s, background 0.12s;
+  flex-shrink: 1;
+  min-width: 0;
+  transition: transform 0.1s;
 }
 
 .hud-profile:active {
-  transform: translateY(2px);
+  transform: translateY(1px);
   box-shadow: 0 1px 0 #7dd3fc;
-  background: #e0f2fe;
 }
 
 .hud-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
   color: #fff;
-  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
 }
 
 .hud-user-details {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .hud-username {
   font-family: var(--game-font, sans-serif);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   color: #1e293b;
-  max-width: 75px;
+  max-width: 62px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -529,8 +533,11 @@ onMounted(async () => {
 
 .hud-high-score {
   font-family: var(--game-font-narrow, sans-serif);
-  font-size: 9px;
+  font-size: 8px;
   color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Center Level */
@@ -539,26 +546,27 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-width: 90px;
+  flex-shrink: 0;
+  min-width: 68px;
 }
 
 .hud-level-badge {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   background: linear-gradient(135deg, #f59e0b, #fbbf24);
-  padding: 3px 8px;
-  border-radius: 12px;
+  padding: 2px 6px;
+  border-radius: 10px;
   box-shadow: 0 2px 0 #b45309;
 }
 
 .level-icon {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .level-number {
   font-family: var(--game-font, sans-serif);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   color: #ffffff;
   letter-spacing: 0.5px;
@@ -567,107 +575,120 @@ onMounted(async () => {
 
 .hud-progress-bar-bg {
   width: 100%;
-  height: 6px;
+  max-width: 64px;
+  height: 5px;
   background: rgba(0, 0, 0, 0.08);
   border-radius: 4px;
   overflow: hidden;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .hud-progress-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #10b981, #34d399);
   border-radius: 4px;
-  transition: width 0.3s ease;
+  transition: width 0.25s ease;
 }
 
 .hud-tiles-counter {
   font-family: var(--game-font-narrow, sans-serif);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   color: #64748b;
+  white-space: nowrap;
 }
 
-/* Right Score & Trophy */
+/* Right Score & Action Buttons */
 .hud-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .hud-score-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   background: rgba(245, 158, 11, 0.12);
   border: 1.5px solid rgba(245, 158, 11, 0.35);
-  padding: 4px 8px;
-  border-radius: 14px;
+  padding: 3px 6px;
+  border-radius: 12px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .score-coin {
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .score-val {
   font-family: var(--game-font, sans-serif);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   color: #d97706;
+  white-space: nowrap;
+}
+
+.hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .hud-leaderboard-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: #38c644;
-  border: 2px solid #278d30;
-  box-shadow: 0 4px 0 #1b6822;
-  border-radius: 14px;
-  padding: 4px 9px;
+  border: 1.5px solid #278d30;
+  box-shadow: 0 3px 0 #1b6822;
+  border-radius: 10px;
+  padding: 0;
   color: #fff;
   cursor: pointer;
+  flex-shrink: 0;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .hud-leaderboard-btn:active {
-  transform: translateY(3px);
+  transform: translateY(2px);
   box-shadow: 0 1px 0 #1b6822;
 }
 
 .btn-trophy {
-  font-size: 14px;
-}
-
-.btn-trophy-text {
-  font-family: var(--game-font, sans-serif);
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  font-size: 13px;
+  line-height: 1;
 }
 
 .hud-settings-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
   background: #38bdf8;
-  border: 2px solid #0284c7;
-  box-shadow: 0 4px 0 #0369a1;
-  border-radius: 14px;
-  padding: 4px 8px;
+  border: 1.5px solid #0284c7;
+  box-shadow: 0 3px 0 #0369a1;
+  border-radius: 10px;
+  padding: 0;
   color: #fff;
   cursor: pointer;
+  flex-shrink: 0;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .hud-settings-btn:active {
-  transform: translateY(3px);
+  transform: translateY(2px);
   box-shadow: 0 1px 0 #0369a1;
 }
 
 .btn-gear {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
 }
 
@@ -714,7 +735,7 @@ onMounted(async () => {
   position: relative;
   overflow: hidden;
 
-  /* Animated arcade background: radial glow + diagonal stripes + cyan/blue gradient */
+  /* Crisp, high-performance static arcade background */
   background:
     radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, 0.22) 0%, transparent 65%),
     repeating-linear-gradient(
@@ -725,13 +746,7 @@ onMounted(async () => {
       transparent 48px
     ),
     linear-gradient(180deg, #38bdf8 0%, #0ea5e9 45%, #0284c7 100%);
-  background-size: 100% 100%, 68px 68px, 100% 100%;
-  animation: bgStripeSlide 40s linear infinite;
-}
-
-@keyframes bgStripeSlide {
-  0% { background-position: 0 0, 0 0, 0 0; }
-  100% { background-position: 0 0, 680px 680px, 0 0; }
+  background-size: 100% 100%, 48px 48px, 100% 100%;
 }
 
 /* ─── Floating Background Decorations ─────────────────────── */
@@ -742,6 +757,7 @@ onMounted(async () => {
   right: 0;
   bottom: 0;
   pointer-events: none;
+  contain: strict;
   overflow: hidden;
   z-index: 1;
 }
@@ -968,10 +984,9 @@ onMounted(async () => {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    transform 0.12s ease,
-    filter 0.2s ease,
-    box-shadow 0.12s ease;
+  transform: translateZ(0);
+  will-change: transform;
+  transition: transform 0.1s ease, opacity 0.1s ease;
 }
 
 .tile-face {
@@ -1203,9 +1218,7 @@ onMounted(async () => {
 .tray-slots {
   display: flex;
   width: 100%;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, 0.98);
   padding: 8px;
   border-radius: 22px;
   gap: 6px;
@@ -1338,30 +1351,26 @@ onMounted(async () => {
 /* ─── Narrow Screen Optimizations (<= 360px width) ────────── */
 @media (max-width: 360px) {
   .hud-container {
-    padding: 4px 6px;
-    gap: 4px;
+    padding: 3px 4px;
+    gap: 3px;
   }
   .hud-username {
-    max-width: 52px;
-    font-size: 10px;
+    max-width: 48px;
+    font-size: 9px;
   }
   .hud-level-box {
-    min-width: 72px;
+    min-width: 60px;
   }
-  .btn-trophy-text {
-    display: none;
-  }
-  .hud-leaderboard-btn {
-    padding: 4px 6px;
-  }
+  .hud-leaderboard-btn,
   .hud-settings-btn {
-    padding: 4px 6px;
+    width: 26px;
+    height: 26px;
   }
   .hud-score-chip {
-    padding: 3px 6px;
+    padding: 2px 4px;
   }
   .score-val {
-    font-size: 11px;
+    font-size: 10px;
   }
   .tray-container {
     width: 98vw;

@@ -130,15 +130,32 @@ export function createBoardFromConfig(
  * Returns a NEW array with updated `isBlocked` flags.
  */
 export function computeBlockedStatus(tiles: Tile[]): Tile[] {
-  return tiles.map(tile => ({
-    ...tile,
-    isBlocked: tiles.some(other => {
-      if (other.z <= tile.z) return false; // same or lower layer
+  let maxZ = 0;
+  for (let i = 0; i < tiles.length; i++) {
+    if (tiles[i].z > maxZ) maxZ = tiles[i].z;
+  }
+
+  // Only tiles with z > 0 can ever block other tiles
+  const potentialBlockers = tiles.filter(t => t.z > 0);
+
+  return tiles.map(tile => {
+    // Top-most layer tiles are never blocked
+    if (tile.z >= maxZ) {
+      return tile.isBlocked ? { ...tile, isBlocked: false } : tile;
+    }
+
+    const isBlocked = potentialBlockers.some(other => {
+      if (other.z <= tile.z) return false;
       const dx = Math.abs(tile.gridX - other.gridX);
+      if (dx >= 0.92) return false;
       const dy = Math.abs(tile.gridY - other.gridY);
-      return dx < 0.92 && dy < 0.92;
-    }),
-  }));
+      return dy < 0.92;
+    });
+
+    // If state did not change, preserve identical object reference for Vue v-dom diffing
+    if (tile.isBlocked === isBlocked) return tile;
+    return { ...tile, isBlocked };
+  });
 }
 
 // ─── Shuffle ──────────────────────────────────────────────────
