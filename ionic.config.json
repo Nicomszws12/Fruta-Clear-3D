@@ -1,0 +1,7 @@
+{
+  "name": "Tile Clear",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}

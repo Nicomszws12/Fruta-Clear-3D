@@ -1,0 +1,35 @@
+/* For information on how to create your own theme, please refer to:
+http://ionicframework.com/docs/theming/ */
+
+@font-face {
+  font-family: 'Kenney Future';
+  src: url('/fonts/Kenney Future.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Kenney Future Narrow';
+  src: url('/fonts/Kenney Future Narrow.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --game-font: 'Kenney Future', -apple-system, Roboto, sans-serif;
+  --game-font-narrow: 'Kenney Future Narrow', 'Kenney Future', sans-serif;
+
+  /* Kenney UI Color Palette Tokens */
+  --kenney-blue: #2b99ff;
+  --kenney-blue-dark: #1e6bc4;
+  --kenney-green: #38c644;
+  --kenney-green-dark: #278d30;
+  --kenney-yellow: #f8be14;
+  --kenney-yellow-dark: #b8860b;
+  --kenney-red: #ea4335;
+  --kenney-red-dark: #aa2218;
+  --kenney-grey: #e0e5eb;
+  --kenney-grey-dark: #a2aab5;
+}
