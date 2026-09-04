@@ -215,17 +215,16 @@ const getConfettiStyle = (index: number) => {
   justify-content: center;
   align-items: center;
   z-index: 10000;
-  padding: 12px;
+  padding: 16px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 /* ─── Card Base ───────────────────────────────────────────── */
 .dialog-card {
   width: 92%;
   max-width: 360px;
-  max-height: calc(100dvh - 32px);
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
+  overflow: visible;
   border-radius: 28px;
   position: relative;
   text-align: center;
@@ -241,7 +240,7 @@ const getConfettiStyle = (index: number) => {
   box-shadow: 
     0 10px 0 #154c8c,
     0 25px 40px rgba(0, 0, 0, 0.35);
-  margin-top: 35px; /* space for protruding stars */
+  margin-top: 48px; /* space for protruding stars */
 }
 
 /* ─── LOSE Card (Kenney Red Theme) ────────────────────────── */
@@ -251,7 +250,7 @@ const getConfettiStyle = (index: number) => {
   box-shadow: 
     0 10px 0 #7c150e,
     0 25px 40px rgba(0, 0, 0, 0.35);
-  margin-top: 35px;
+  margin-top: 48px;
 }
 
 /* ─── WELCOME Card (Kenney Grey Theme with Tab) ───────────── */

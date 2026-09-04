@@ -308,87 +308,90 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- ════════ POWER-UPS BAR ════════ -->
-        <div class="powerups-bar">
-          <!-- Undo Powerup -->
-          <button
-            class="powerup-btn btn-undo"
-            :disabled="
-              moveHistory.length === 0 ||
-              powerUpState.undoCount <= 0 ||
-              isAnimating
-            "
-            @click="undoMove()"
-          >
-            <div class="powerup-icon-wrapper">
-              <span class="powerup-icon">↩️</span>
-              <span class="powerup-badge">{{ powerUpState.undoCount }}</span>
-            </div>
-            <span class="powerup-label">Deshacer</span>
-          </button>
+        <!-- ════════ BOTTOM CONTROLS (POWERUPS + TRAY) ════════ -->
+        <div class="bottom-controls">
+          <!-- Powerups Bar -->
+          <div class="powerups-bar">
+            <!-- Undo Powerup -->
+            <button
+              class="powerup-btn btn-undo"
+              :disabled="
+                moveHistory.length === 0 ||
+                powerUpState.undoCount <= 0 ||
+                isAnimating
+              "
+              @click="undoMove()"
+            >
+              <div class="powerup-icon-wrapper">
+                <span class="powerup-icon">↩️</span>
+                <span class="powerup-badge">{{ powerUpState.undoCount }}</span>
+              </div>
+              <span class="powerup-label">Deshacer</span>
+            </button>
 
-          <!-- Shuffle Powerup -->
-          <button
-            class="powerup-btn btn-shuffle"
-            :disabled="
-              boardTiles.length === 0 ||
-              powerUpState.shuffleCount <= 0 ||
-              isAnimating
-            "
-            @click="shuffleBoard()"
-          >
-            <div class="powerup-icon-wrapper">
-              <span class="powerup-icon">🔀</span>
-              <span class="powerup-badge">{{ powerUpState.shuffleCount }}</span>
-            </div>
-            <span class="powerup-label">Mezclar</span>
-          </button>
+            <!-- Shuffle Powerup -->
+            <button
+              class="powerup-btn btn-shuffle"
+              :disabled="
+                boardTiles.length === 0 ||
+                powerUpState.shuffleCount <= 0 ||
+                isAnimating
+              "
+              @click="shuffleBoard()"
+            >
+              <div class="powerup-icon-wrapper">
+                <span class="powerup-icon">🔀</span>
+                <span class="powerup-badge">{{ powerUpState.shuffleCount }}</span>
+              </div>
+              <span class="powerup-label">Mezclar</span>
+            </button>
 
-          <!-- Hint / Magic Wand Powerup -->
-          <button
-            class="powerup-btn btn-hint"
-            :disabled="
-              powerUpState.hintCount <= 0 ||
-              tray.length > MAX_TRAY - 3 ||
-              isAnimating
-            "
-            @click="autoMatch()"
-          >
-            <div class="powerup-icon-wrapper">
-              <span class="powerup-icon">✨</span>
-              <span class="powerup-badge">{{ powerUpState.hintCount }}</span>
-            </div>
-            <span class="powerup-label">Varita</span>
-          </button>
-        </div>
-
-        <!-- ════════ TRAY (BANDEJA) ════════ -->
-        <div class="tray-container" :class="{ 'is-critical': isTrayCritical }">
-          <div class="tray-warning-label" v-if="isTrayCritical">
-            ⚠️ ¡Cuidado! Espacio casi lleno
+            <!-- Hint / Magic Wand Powerup -->
+            <button
+              class="powerup-btn btn-hint"
+              :disabled="
+                powerUpState.hintCount <= 0 ||
+                tray.length > MAX_TRAY - 3 ||
+                isAnimating
+              "
+              @click="autoMatch()"
+            >
+              <div class="powerup-icon-wrapper">
+                <span class="powerup-icon">✨</span>
+                <span class="powerup-badge">{{ powerUpState.hintCount }}</span>
+              </div>
+              <span class="powerup-label">Varita</span>
+            </button>
           </div>
-          <div class="tray-slots">
-            <div
-              v-for="tile in tray"
-              :key="'tray-' + tile.id"
-              class="tray-tile"
-            >
-              <img
-                v-if="getAssetByKey(tile.type).imagePath"
-                :src="getAssetByKey(tile.type).imagePath"
-                :alt="getAssetByKey(tile.type).label"
-                class="tile-img"
-              />
-              <span v-else class="tile-emoji">
-                {{ getAssetByKey(tile.type).emoji }}
-              </span>
+
+          <!-- Tray Container (Bandeja) -->
+          <div class="tray-container" :class="{ 'is-critical': isTrayCritical }">
+            <div class="tray-warning-label" v-if="isTrayCritical">
+              ⚠️ ¡Cuidado! Espacio casi lleno
             </div>
-            <div
-              v-for="n in MAX_TRAY - tray.length"
-              :key="'empty-' + n"
-              class="empty-slot"
-            >
-              <span class="empty-slot-num">{{ tray.length + n }}</span>
+            <div class="tray-slots">
+              <div
+                v-for="tile in tray"
+                :key="'tray-' + tile.id"
+                class="tray-tile"
+              >
+                <img
+                  v-if="getAssetByKey(tile.type).imagePath"
+                  :src="getAssetByKey(tile.type).imagePath"
+                  :alt="getAssetByKey(tile.type).label"
+                  class="tile-img"
+                />
+                <span v-else class="tile-emoji">
+                  {{ getAssetByKey(tile.type).emoji }}
+                </span>
+              </div>
+              <div
+                v-for="n in MAX_TRAY - tray.length"
+                :key="'empty-' + n"
+                class="empty-slot"
+              >
+                <span class="empty-slot-num">{{ tray.length + n }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -448,6 +451,9 @@ onMounted(async () => {
 /* ─── Background & Theme ──────────────────────────────────── */
 .game-background {
   --background: #0284c7;
+  --overflow: hidden;
+  overflow: hidden;
+  height: 100%;
 }
 
 /* ─── Gamer HUD Header ────────────────────────────────────── */
@@ -701,9 +707,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   height: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
-  padding: 4px 0 max(10px, env(safe-area-inset-bottom, 10px));
+  max-height: 100%;
+  width: 100%;
+  padding: 4px 6px 0;
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
@@ -944,7 +950,7 @@ onMounted(async () => {
     calc((100vw - 36px) / var(--grid-cols)),
     calc((100dvh - 270px) / var(--grid-rows)),
     calc((100vh - 270px) / var(--grid-rows)),
-    52px
+    50px
   );
 
   position: relative;
@@ -1047,13 +1053,26 @@ onMounted(async () => {
   pointer-events: none;
 }
 
+/* ─── Bottom Controls Container (Powerups + Tray) ─────────── */
+.bottom-controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  z-index: 5;
+  margin-top: auto;
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+}
+
 /* ─── Power-ups Bar ───────────────────────────────────────── */
 .powerups-bar {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: center;
   flex-shrink: 0;
-  margin: 6px 0 10px;
+  margin: 0;
 }
 
 .powerup-btn {
@@ -1164,6 +1183,7 @@ onMounted(async () => {
   gap: 4px;
   transition: all 0.3s ease;
   z-index: 2;
+  margin: 0;
 }
 
 .tray-warning-label {
@@ -1271,6 +1291,10 @@ onMounted(async () => {
 
 /* ─── Compact Mode for Short Mobile Screens (e.g. iPhone SE, 667-700px) ── */
 @media (max-height: 700px) {
+  .bottom-controls {
+    gap: 4px;
+    padding-bottom: max(4px, env(safe-area-inset-bottom, 4px));
+  }
   .world-subbar {
     padding: 1px 8px;
     gap: 4px;
@@ -1281,33 +1305,33 @@ onMounted(async () => {
     padding: 2px 8px;
   }
   .powerups-bar {
-    margin: 2px 0 6px;
-    gap: 10px;
+    margin: 0;
+    gap: 8px;
   }
   .powerup-btn {
-    min-width: 66px;
-    padding: 5px 10px 4px;
-    border-radius: 14px;
+    min-width: 62px;
+    padding: 4px 8px 3px;
+    border-radius: 12px;
   }
   .powerup-icon {
-    font-size: 18px;
+    font-size: 16px;
   }
   .powerup-label {
     font-size: 9px;
   }
   .tray-slots {
-    padding: 6px;
+    padding: 5px;
     gap: 4px;
-    border-radius: 18px;
+    border-radius: 16px;
   }
   .tray-tile,
   .empty-slot {
-    max-height: 44px;
+    max-height: 40px;
     border-radius: 10px;
   }
   .board-mat {
-    padding: 8px 6px;
-    border-radius: 18px;
+    padding: 6px 4px;
+    border-radius: 16px;
   }
 }
 
