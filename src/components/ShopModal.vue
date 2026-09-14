@@ -397,12 +397,15 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   background: #ffffff;
   border: 2px solid #e2e8f0;
   border-radius: 18px;
-  padding: 10px;
+  padding: 8px 10px;
   box-shadow: 0 2px 0 #cbd5e1;
   display: flex;
   align-items: center;
   gap: 10px;
   transition: border-color 0.2s ease;
+  flex-shrink: 0;
+  min-height: 52px;
+  box-sizing: border-box;
 }
 
 .item-card.is-equipped {
@@ -417,7 +420,7 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(2, 1fr);
   gap: 2px;
-  width: 54px;
+  width: 52px;
   height: 38px;
   flex-shrink: 0;
   background: #f0f9ff;
@@ -438,7 +441,7 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
 
 /* ─── Background Preview ─────────────────────────────────── */
 .bg-preview {
-  width: 54px;
+  width: 52px;
   height: 38px;
   flex-shrink: 0;
   border-radius: 10px;
@@ -464,9 +467,9 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
 }
 
 .item-name {
-  font-family: var(--game-font, sans-serif);
-  font-size: 11px;
-  font-weight: 800;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 12px;
+  font-weight: 900;
   color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
@@ -476,22 +479,22 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
 .item-price {
   font-family: var(--game-font-narrow, sans-serif);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   color: #d97706;
 }
 
 .item-price.free {
-  color: #22c55e;
+  color: #16a34a;
   font-weight: 900;
 }
 
 /* ─── Action Buttons ──────────────────────────────────────── */
 .item-action-btn {
   flex-shrink: 0;
-  font-family: var(--game-font, sans-serif);
-  font-size: 8px;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 10px;
   font-weight: 900;
-  padding: 5px 8px;
+  padding: 6px 10px;
   border-radius: 10px;
   cursor: pointer;
   white-space: nowrap;

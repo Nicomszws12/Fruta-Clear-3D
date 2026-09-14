@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { GAME_WORLDS, type WorldInfo } from '../game/levelConfig';
 import { playClick, playTap } from '../game/sounds';
 
@@ -14,40 +14,44 @@ const emit = defineEmits<{
   (e: 'select-level', level: number): void;
 }>();
 
-// Selected era tab for fast navigation through the 100 worlds
-// Eras of 20 worlds each: 1-20, 21-40, 41-60, 61-80, 81-100
+// 5 Eras of 20 worlds each for clean mobile tab navigation
 type EraId = 1 | 2 | 3 | 4 | 5;
 const activeEra = ref<EraId>(1);
 
 const ERAS = [
-  { id: 1 as EraId, label: 'Mundos 1-20', icon: '🍓', minWorld: 1, maxWorld: 20 },
-  { id: 2 as EraId, label: 'Mundos 21-40', icon: '☁️', minWorld: 21, maxWorld: 40 },
-  { id: 3 as EraId, label: 'Mundos 41-60', icon: '🦁', minWorld: 41, maxWorld: 60 },
-  { id: 4 as EraId, label: 'Mundos 61-80', icon: '🏟️', minWorld: 61, maxWorld: 80 },
-  { id: 5 as EraId, label: 'Mundos 81-100', icon: '👑', minWorld: 81, maxWorld: 100 },
+  { id: 1 as EraId, label: '1 - 20', icon: '🍓', minWorld: 1, maxWorld: 20 },
+  { id: 2 as EraId, label: '21 - 40', icon: '☁️', minWorld: 21, maxWorld: 40 },
+  { id: 3 as EraId, label: '41 - 60', icon: '🦁', minWorld: 41, maxWorld: 60 },
+  { id: 4 as EraId, label: '61 - 80', icon: '🏟️', minWorld: 61, maxWorld: 80 },
+  { id: 5 as EraId, label: '81 - 100', icon: '👑', minWorld: 81, maxWorld: 100 },
 ];
 
-// Expanded world ID to view individual levels inside
+// Currently expanded world ID
 const expandedWorldId = ref<number | null>(null);
 
-// Find which world the current level belongs to
+// Find which world the player is currently on
 const currentWorld = computed(() => {
   return GAME_WORLDS.find(w => props.currentLevel >= w.minLevel && props.currentLevel <= w.maxLevel) || GAME_WORLDS[0];
 });
 
-// Auto-switch to current world's era when modal opens
+// Auto-navigate to player's current world & era when opened
 watch(() => props.isOpen, (open) => {
   if (open) {
     const cWorld = currentWorld.value;
     const era = ERAS.find(e => cWorld.id >= e.minWorld && cWorld.id <= e.maxWorld);
-    if (era) {
-      activeEra.value = era.id;
-    }
+    if (era) activeEra.value = era.id;
     expandedWorldId.value = cWorld.id;
+
+    nextTick(() => {
+      const el = document.getElementById(`world-card-${cWorld.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
   }
 });
 
-// Filtered worlds for the active era
+// Worlds for the active tab
 const visibleWorlds = computed(() => {
   const era = ERAS.find(e => e.id === activeEra.value);
   if (!era) return GAME_WORLDS.slice(0, 20);
@@ -89,6 +93,10 @@ const jumpToCurrentWorld = () => {
   const era = ERAS.find(e => cWorld.id >= e.minWorld && cWorld.id <= e.maxWorld);
   if (era) activeEra.value = era.id;
   expandedWorldId.value = cWorld.id;
+  nextTick(() => {
+    const el = document.getElementById(`world-card-${cWorld.id}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 };
 </script>
 
@@ -99,7 +107,7 @@ const jumpToCurrentWorld = () => {
         <Transition name="dialog-pop">
           <div v-if="isOpen" class="dialog-card map-card">
 
-            <!-- Window Tab -->
+            <!-- Window Tab Header -->
             <div class="window-tab">
               <span>🗺️ MAPA DE MUNDOS</span>
             </div>
@@ -122,7 +130,7 @@ const jumpToCurrentWorld = () => {
               </div>
             </div>
 
-            <!-- Era Tabs for 100 Worlds -->
+            <!-- Era Tabs (1-20, 21-40, 41-60, 61-80, 81-100) -->
             <div class="era-tab-bar">
               <button
                 v-for="era in ERAS"
@@ -141,6 +149,7 @@ const jumpToCurrentWorld = () => {
               <div
                 v-for="world in visibleWorlds"
                 :key="world.id"
+                :id="`world-card-${world.id}`"
                 class="world-item-card"
                 :class="`status-${getWorldStatus(world)}`"
               >
@@ -151,11 +160,11 @@ const jumpToCurrentWorld = () => {
                   </div>
 
                   <div class="world-title-area">
-                    <div class="world-num-name">
+                    <div class="world-num-row">
                       <span class="world-num">Mundo {{ world.id }}</span>
-                      <h3 class="world-name">{{ world.name }}</h3>
+                      <span class="world-range">Nv. {{ world.minLevel }}-{{ world.maxLevel }}</span>
                     </div>
-                    <span class="world-range">Niveles {{ world.minLevel }} - {{ world.maxLevel }}</span>
+                    <h3 class="world-name">{{ world.name }}</h3>
                   </div>
 
                   <!-- Status Pill -->
@@ -163,7 +172,7 @@ const jumpToCurrentWorld = () => {
                     <span v-if="getWorldStatus(world) === 'completed'" class="pill pill-completed">⭐ Listo</span>
                     <span v-else-if="getWorldStatus(world) === 'current'" class="pill pill-current">🔥 Actual</span>
                     <span v-else-if="getWorldStatus(world) === 'unlocked'" class="pill pill-unlocked">🔓 Abierto</span>
-                    <span v-else class="pill pill-locked">🔒 Bloqueado</span>
+                    <span v-else class="pill pill-locked">🔒 Bloq.</span>
                   </div>
 
                   <!-- Expand Arrow -->
@@ -186,13 +195,13 @@ const jumpToCurrentWorld = () => {
                         'is-locked': (world.minLevel + lvl - 1) > maxUnlockedLevel
                       }"
                       :disabled="(world.minLevel + lvl - 1) > maxUnlockedLevel"
-                      @click="handleSelectLevel(world.minLevel + lvl - 1)"
+                      @click.stop="handleSelectLevel(world.minLevel + lvl - 1)"
                       :title="`Nivel ${world.minLevel + lvl - 1}`"
                     >
                       <span class="lvl-num">{{ world.minLevel + lvl - 1 }}</span>
                       <span v-if="(world.minLevel + lvl - 1) === currentLevel" class="lvl-indicator">▶</span>
                       <span v-else-if="(world.minLevel + lvl - 1) < maxUnlockedLevel" class="lvl-indicator">★</span>
-                      <span v-else-if="(world.minLevel + lvl - 1) > maxUnlockedLevel" class="lvl-indicator">🔒</span>
+                      <span v-else class="lvl-indicator">🔒</span>
                     </button>
                   </div>
                 </div>
@@ -227,15 +236,15 @@ const jumpToCurrentWorld = () => {
   justify-content: center;
   align-items: center;
   z-index: 10000;
-  padding: 14px;
+  padding: 12px;
   box-sizing: border-box;
 }
 
 /* ─── Card Base ───────────────────────────────────────────── */
 .map-card {
-  width: 94%;
+  width: 96%;
   max-width: 420px;
-  max-height: calc(100dvh - 36px);
+  height: calc(100dvh - 36px);
   max-height: calc(100vh - 36px);
   background: #f8fafc;
   border: 4px solid #3b82f6;
@@ -246,16 +255,16 @@ const jumpToCurrentWorld = () => {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 24px 14px 14px;
+  padding: 22px 12px 12px;
   box-sizing: border-box;
   overflow: hidden;
-  margin-top: 15px;
+  margin-top: 14px;
 }
 
 /* Protruding Window Tab */
 .window-tab {
   position: absolute;
-  top: -30px;
+  top: -28px;
   left: 20px;
   background: #3b82f6;
   border: 3px solid #1d4ed8;
@@ -272,7 +281,7 @@ const jumpToCurrentWorld = () => {
 /* Close Corner */
 .modal-close-corner {
   position: absolute;
-  top: 12px; right: 12px;
+  top: 10px; right: 10px;
   background: #ef4444;
   border: 2px solid #b91c1c;
   box-shadow: 0 3px 0 #991b1b;
@@ -299,16 +308,16 @@ const jumpToCurrentWorld = () => {
 /* ─── Header ──────────────────────────────────────────────── */
 .map-header {
   text-align: center;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   flex-shrink: 0;
 }
 
 .map-title {
   font-family: var(--game-font, sans-serif);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 900;
   color: #1e3a8a;
-  margin: 0 0 6px 0;
+  margin: 0 0 4px 0;
   letter-spacing: 0.5px;
 }
 
@@ -318,7 +327,7 @@ const jumpToCurrentWorld = () => {
   gap: 8px;
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   border: 2px solid #3b82f6;
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 6px 10px;
   box-shadow: 0 3px 0 #2563eb;
   cursor: pointer;
@@ -332,6 +341,7 @@ const jumpToCurrentWorld = () => {
 
 .banner-icon {
   font-size: 20px;
+  flex-shrink: 0;
 }
 
 .banner-info {
@@ -339,6 +349,7 @@ const jumpToCurrentWorld = () => {
   text-align: left;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .banner-label {
@@ -346,12 +357,16 @@ const jumpToCurrentWorld = () => {
   font-size: 11px;
   font-weight: 900;
   color: #1e40af;
+  white-space: nowrap;
 }
 
 .banner-sub {
   font-size: 10px;
   color: #3b82f6;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .banner-jump-btn {
@@ -362,6 +377,7 @@ const jumpToCurrentWorld = () => {
   font-weight: 900;
   padding: 4px 8px;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 
 /* ─── Era Tab Bar ─────────────────────────────────────────── */
@@ -370,13 +386,12 @@ const jumpToCurrentWorld = () => {
   gap: 4px;
   margin-bottom: 8px;
   flex-shrink: 0;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .era-btn {
   flex: 1;
-  min-width: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -384,10 +399,11 @@ const jumpToCurrentWorld = () => {
   background: #ffffff;
   border: 2px solid #e2e8f0;
   border-radius: 12px;
-  padding: 4px 2px;
+  padding: 5px 2px;
   cursor: pointer;
   box-shadow: 0 2px 0 #cbd5e1;
   transition: all 0.15s ease;
+  min-width: 0;
 }
 
 .era-btn.is-active {
@@ -402,15 +418,17 @@ const jumpToCurrentWorld = () => {
 }
 
 .era-icon {
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .era-label {
-  font-family: var(--game-font, sans-serif);
-  font-size: 8px;
-  font-weight: 800;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 10px;
+  font-weight: 900;
   white-space: nowrap;
-  color: #64748b;
+  color: #475569;
+  margin-top: 2px;
 }
 
 .era-btn.is-active .era-label {
@@ -424,7 +442,8 @@ const jumpToCurrentWorld = () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-right: 2px;
+  padding: 2px 2px 6px 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ─── World Card ──────────────────────────────────────────── */
@@ -434,7 +453,9 @@ const jumpToCurrentWorld = () => {
   border-radius: 16px;
   box-shadow: 0 2px 0 #cbd5e1;
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
+  flex-shrink: 0; /* CRITICAL: Prevents flex container from squishing cards! */
+  min-height: 52px;
 }
 
 .world-item-card.status-current {
@@ -448,8 +469,8 @@ const jumpToCurrentWorld = () => {
 }
 
 .world-item-card.status-locked {
-  opacity: 0.65;
-  background: #f1f5f9;
+  opacity: 0.75;
+  background: #f8fafc;
 }
 
 .world-card-header {
@@ -458,11 +479,14 @@ const jumpToCurrentWorld = () => {
   gap: 8px;
   padding: 8px 10px;
   cursor: pointer;
+  min-height: 52px;
+  box-sizing: border-box;
 }
 
 .world-badge-icon {
   width: 36px;
   height: 36px;
+  min-width: 36px;
   background: #eff6ff;
   border: 1.5px solid #bfdbfe;
   border-radius: 10px;
@@ -478,52 +502,73 @@ const jumpToCurrentWorld = () => {
   border-color: #fde68a;
 }
 
+.status-completed .world-badge-icon {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
 .world-title-area {
   flex: 1;
   min-width: 0;
+  text-align: left;
 }
 
-.world-num-name {
+.world-num-row {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 
 .world-num {
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 9px;
-  font-weight: 800;
-  color: #64748b;
+  font-weight: 900;
+  color: #3b82f6;
   text-transform: uppercase;
 }
 
+.status-current .world-num {
+  color: #b45309;
+}
+
+.status-completed .world-num {
+  color: #16a34a;
+}
+
+.world-range {
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 9px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
 .world-name {
-  font-family: var(--game-font, sans-serif);
-  font-size: 12px;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 13px;
   font-weight: 900;
   color: #0f172a;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.world-range {
-  font-size: 9px;
-  color: #94a3b8;
-  font-weight: 700;
+  line-height: 1.1;
 }
 
 /* Status Pill */
 .world-status-pill {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .pill {
-  font-family: var(--game-font, sans-serif);
-  font-size: 9px;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 10px;
   font-weight: 900;
-  padding: 3px 6px;
+  padding: 3px 7px;
   border-radius: 8px;
+  white-space: nowrap;
 }
 
 .pill-completed {
@@ -554,6 +599,8 @@ const jumpToCurrentWorld = () => {
   font-size: 9px;
   color: #94a3b8;
   transition: transform 0.2s ease;
+  flex-shrink: 0;
+  margin-left: 2px;
 }
 
 .expand-arrow.is-expanded {
@@ -564,7 +611,7 @@ const jumpToCurrentWorld = () => {
 .levels-grid-container {
   padding: 8px 10px 10px;
   border-top: 1px dashed #e2e8f0;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .levels-grid {
@@ -627,7 +674,7 @@ const jumpToCurrentWorld = () => {
 .level-circle-btn.is-locked {
   background: #f1f5f9;
   border-color: #e2e8f0;
-  opacity: 0.6;
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
@@ -636,9 +683,9 @@ const jumpToCurrentWorld = () => {
 }
 
 .lvl-num {
-  font-family: var(--game-font, sans-serif);
-  font-size: 10px;
-  font-weight: 800;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 11px;
+  font-weight: 900;
   color: #1e293b;
   line-height: 1;
 }
@@ -696,4 +743,3 @@ const jumpToCurrentWorld = () => {
   100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 </style>
-

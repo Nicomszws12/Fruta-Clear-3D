@@ -253,32 +253,11 @@ onMounted(async () => {
             <div class="hud-avatar">
               {{ username.charAt(0).toUpperCase() }}
             </div>
-            <div class="hud-user-details">
-              <span class="hud-username">{{ username }}</span>
-              <span class="hud-high-score">Récord: {{ formatScore(userHighScore) }}</span>
-            </div>
+            <span class="hud-username">{{ username }}</span>
           </div>
 
-          <!-- Center: Level & Progress Indicator (Clickable to open World Map) -->
-          <div class="hud-level-box" @click="openMap" title="Ver Mapa de Mundos y Niveles">
-            <div class="hud-level-badge">
-              <span class="level-icon">⭐</span>
-              <span class="level-number">Nv. {{ level }}</span>
-              <span class="level-map-hint">🗺️</span>
-            </div>
-            <div class="hud-progress-bar-bg">
-              <div
-                class="hud-progress-bar-fill"
-                :style="{ width: `${levelProgress * 100}%` }"
-              ></div>
-            </div>
-            <span class="hud-tiles-counter">
-              {{ totalLevelTiles - remainingTiles }}/{{ totalLevelTiles }} fichas
-            </span>
-          </div>
-
-          <!-- Right: Coins, Score & Action Buttons -->
-          <div class="hud-right">
+          <!-- Center: Currency & Score Chips -->
+          <div class="hud-center-chips">
             <div class="hud-coin-chip" @click="openShop" title="Monedas — Abrir Tienda">
               <span class="coin-icon">🪙</span>
               <span class="coin-val">{{ formatScore(userCoins) }}</span>
@@ -288,24 +267,25 @@ onMounted(async () => {
               <span class="score-coin">⭐</span>
               <span class="score-val">{{ formatScore(score) }}</span>
             </div>
+          </div>
 
-            <div class="hud-actions">
-              <button class="hud-map-btn" @click="openMap" title="Mapa de Mundos">
-                <span class="btn-map">🗺️</span>
-              </button>
+          <!-- Right: 4 Action Buttons -->
+          <div class="hud-actions">
+            <button class="hud-btn hud-map-btn" @click="openMap" title="Mapa de Mundos">
+              <span class="btn-icon">🗺️</span>
+            </button>
 
-              <button class="hud-shop-btn" @click="openShop" title="Tienda">
-                <span class="btn-shop">🛒</span>
-              </button>
+            <button class="hud-btn hud-shop-btn" @click="openShop" title="Tienda">
+              <span class="btn-icon">🛒</span>
+            </button>
 
-              <button class="hud-leaderboard-btn" @click="openLeaderboard" title="Tabla de Clasificación">
-                <span class="btn-trophy">🏆</span>
-              </button>
+            <button class="hud-btn hud-leaderboard-btn" @click="openLeaderboard" title="Tabla de Clasificación">
+              <span class="btn-icon">🏆</span>
+            </button>
 
-              <button class="hud-settings-btn" @click="openSettings" title="Ajustes de Juego">
-                <span class="btn-gear">⚙️</span>
-              </button>
-            </div>
+            <button class="hud-btn hud-settings-btn" @click="openSettings" title="Ajustes de Juego">
+              <span class="btn-icon">⚙️</span>
+            </button>
           </div>
         </div>
       </ion-toolbar>
@@ -313,11 +293,25 @@ onMounted(async () => {
 
     <ion-content class="game-background" :scroll-y="false">
       <div class="game-layout" :style="dynamicBgStyle">
-        <!-- ════════ WORLD THEME HEADER (Clickable to open World Map) ════════ -->
-        <div class="world-subbar" @click="openMap" title="Ver Mapa de Mundos">
-          <span class="world-name-tag">{{ worldName }}</span>
-          <span class="archetype-name-tag">{{ levelName }}</span>
-          <span class="world-map-icon">🗺️</span>
+        <!-- ════════ WORLD & LEVEL SUBBAR (Clickable to open World Map) ════════ -->
+        <div class="world-subbar" @click="openMap" title="Ver Mapa de Mundos y Niveles">
+          <div class="subbar-left">
+            <span class="subbar-level-badge">⭐ Nv. {{ level }}</span>
+            <span class="subbar-world-name">{{ worldName }}</span>
+            <span class="subbar-map-icon">🗺️</span>
+          </div>
+
+          <div class="subbar-right">
+            <div class="subbar-progress-track">
+              <div
+                class="subbar-progress-fill"
+                :style="{ width: `${levelProgress * 100}%` }"
+              ></div>
+            </div>
+            <span class="subbar-tiles-counter">
+              {{ totalLevelTiles - remainingTiles }}/{{ totalLevelTiles }} fichas
+            </span>
+          </div>
         </div>
 
         <!-- ════════ FLOATING COMBO BANNER ════════ -->
@@ -570,8 +564,8 @@ onMounted(async () => {
 .game-hud-toolbar {
   --background: rgba(255, 255, 255, 0.98);
   --color: #0f172a;
-  border-bottom: 3px solid #0284c7;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-bottom: 2.5px solid #0284c7;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
   padding-top: env(safe-area-inset-top, 0px);
 }
 
@@ -579,27 +573,26 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: 3px 6px;
   gap: 4px;
   width: 100%;
   max-width: 100vw;
   box-sizing: border-box;
-  overflow: hidden;
 }
 
 /* Left Profile */
 .hud-profile {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: #f0f9ff;
   border: 1.5px solid #bae6fd;
   box-shadow: 0 2px 0 #7dd3fc;
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 2px 6px 2px 3px;
   cursor: pointer;
-  flex-shrink: 1;
-  min-width: 0;
+  flex-shrink: 0;
+  max-width: 84px;
   transition: transform 0.1s;
 }
 
@@ -609,8 +602,8 @@ onMounted(async () => {
 }
 
 .hud-avatar {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   display: flex;
@@ -622,141 +615,24 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.hud-user-details {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-}
-
 .hud-username {
-  font-family: var(--game-font, sans-serif);
-  font-size: 10px;
-  font-weight: 800;
-  color: #1e293b;
-  max-width: 62px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hud-high-score {
   font-family: var(--game-font-narrow, sans-serif);
-  font-size: 8px;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Center Level */
-.hud-level-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  min-width: 68px;
-  cursor: pointer;
-  transition: transform 0.1s ease;
-}
-
-.hud-level-box:active {
-  transform: scale(0.96);
-}
-
-.hud-level-badge {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  background: linear-gradient(135deg, #f59e0b, #fbbf24);
-  padding: 2px 6px;
-  border-radius: 10px;
-  box-shadow: 0 2px 0 #b45309;
-}
-
-.level-icon {
-  font-size: 10px;
-}
-
-.level-map-hint {
-  font-size: 8px;
-  margin-left: 2px;
-  opacity: 0.85;
-}
-
-.level-number {
-  font-family: var(--game-font, sans-serif);
   font-size: 10px;
   font-weight: 900;
-  color: #ffffff;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-}
-
-.hud-progress-bar-bg {
-  width: 100%;
-  max-width: 64px;
-  height: 5px;
-  background: rgba(0, 0, 0, 0.08);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-top: 1px;
-}
-
-.hud-progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #10b981, #34d399);
-  border-radius: 4px;
-  transition: width 0.25s ease;
-}
-
-.hud-tiles-counter {
-  font-family: var(--game-font-narrow, sans-serif);
-  font-size: 8px;
-  font-weight: 700;
-  color: #64748b;
+  color: #1e293b;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52px;
 }
 
-/* Right Score & Action Buttons */
-.hud-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.hud-score-chip {
+/* Center Currency Chips */
+.hud-center-chips {
   display: flex;
   align-items: center;
   gap: 3px;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1.5px solid rgba(245, 158, 11, 0.35);
-  padding: 3px 6px;
-  border-radius: 12px;
   flex-shrink: 1;
   min-width: 0;
-}
-
-.score-coin {
-  font-size: 11px;
-}
-
-.score-val {
-  font-family: var(--game-font, sans-serif);
-  font-size: 11px;
-  font-weight: 900;
-  color: #d97706;
-  white-space: nowrap;
-}
-
-.hud-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
 }
 
 /* Coin Chip */
@@ -766,13 +642,12 @@ onMounted(async () => {
   gap: 3px;
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   border: 1.5px solid #f59e0b;
-  padding: 3px 6px;
-  border-radius: 12px;
-  flex-shrink: 1;
-  min-width: 0;
+  padding: 2px 5px;
+  border-radius: 10px;
   cursor: pointer;
   box-shadow: 0 2px 0 #d97706;
   transition: transform 0.1s;
+  flex-shrink: 0;
 }
 
 .hud-coin-chip:active {
@@ -782,164 +657,186 @@ onMounted(async () => {
 
 .coin-icon {
   font-size: 11px;
+  line-height: 1;
 }
 
 .coin-val {
-  font-family: var(--game-font, sans-serif);
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 10px;
   font-weight: 900;
   color: #92400e;
   white-space: nowrap;
 }
 
-/* Map Button */
-.hud-map-btn {
+/* Score Chip */
+.hud-score-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1.5px solid rgba(245, 158, 11, 0.35);
+  padding: 2px 5px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.score-coin {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.score-val {
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 10px;
+  font-weight: 900;
+  color: #d97706;
+  white-space: nowrap;
+}
+
+/* Right Actions */
+.hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.hud-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.hud-btn:active {
+  transform: translateY(1px);
+}
+
+.btn-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.hud-map-btn {
   background: #3b82f6;
   border: 1.5px solid #1d4ed8;
-  box-shadow: 0 3px 0 #1e40af;
-  border-radius: 10px;
-  padding: 0;
-  color: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  box-shadow: 0 2px 0 #1e40af;
 }
 
-.hud-map-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #1e40af;
-}
-
-.btn-map {
-  font-size: 13px;
-  line-height: 1;
-}
-
-/* Shop Button */
 .hud-shop-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
   background: #f59e0b;
   border: 1.5px solid #d97706;
-  box-shadow: 0 3px 0 #b45309;
-  border-radius: 10px;
-  padding: 0;
-  color: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-}
-
-.hud-shop-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #b45309;
-}
-
-.btn-shop {
-  font-size: 13px;
-  line-height: 1;
+  box-shadow: 0 2px 0 #b45309;
 }
 
 .hud-leaderboard-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
   background: #38c644;
   border: 1.5px solid #278d30;
-  box-shadow: 0 3px 0 #1b6822;
-  border-radius: 10px;
-  padding: 0;
-  color: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-}
-
-.hud-leaderboard-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #1b6822;
-}
-
-.btn-trophy {
-  font-size: 13px;
-  line-height: 1;
+  box-shadow: 0 2px 0 #1b6822;
 }
 
 .hud-settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: #38bdf8;
+  background: #0ea5e9;
   border: 1.5px solid #0284c7;
-  box-shadow: 0 3px 0 #0369a1;
-  border-radius: 10px;
-  padding: 0;
-  color: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  box-shadow: 0 2px 0 #0369a1;
 }
 
-.hud-settings-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #0369a1;
-}
-
-.btn-gear {
-  font-size: 13px;
-  line-height: 1;
-}
-
-/* ─── World Subbar ────────────────────────────────────────── */
+/* ─── World & Level Subbar ────────────────────────────────── */
 .world-subbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 4px 12px;
-  flex-shrink: 0;
+  justify-content: space-between;
+  width: calc(100% - 12px);
+  max-width: 440px;
+  margin: 4px auto 2px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
   cursor: pointer;
+  flex-shrink: 0;
+  box-sizing: border-box;
   transition: transform 0.1s ease;
 }
 
 .world-subbar:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
-.world-name-tag {
-  font-family: var(--game-font, sans-serif);
-  font-size: 11px;
-  font-weight: 800;
-  color: #334155;
-  background: #ffffff;
-  padding: 3px 10px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 0 #cbd5e1;
+.subbar-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
-.archetype-name-tag {
+.subbar-level-badge {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 10px;
+  font-weight: 900;
+  color: #ffffff;
+  box-shadow: 0 1.5px 0 #b45309;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.subbar-world-name {
   font-family: var(--game-font-narrow, sans-serif);
   font-size: 11px;
-  color: #64748b;
-  font-weight: 700;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 }
 
-.world-map-icon {
-  font-size: 12px;
-  opacity: 0.9;
+.subbar-map-icon {
+  font-size: 11px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.subbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.subbar-progress-track {
+  width: 50px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.subbar-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.subbar-tiles-counter {
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 9px;
+  font-weight: 800;
+  color: #475569;
+  white-space: nowrap;
 }
 
 /* ─── Main Game Layout ────────────────────────────────────── */
