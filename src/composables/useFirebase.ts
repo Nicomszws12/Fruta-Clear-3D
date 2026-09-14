@@ -1,6 +1,6 @@
 /**
  * Firebase composable — authentication, user profile, persistence,
- * and global leaderboard queries.
+ * global leaderboard queries, and cosmetics inventory management.
  */
 import { ref } from 'vue';
 import { db, auth, signInAnonymously } from '../firebase';
@@ -15,15 +15,24 @@ import {
   limit,
   getDocs,
   serverTimestamp,
+  arrayUnion,
+  increment,
 } from 'firebase/firestore';
 import { alertController } from '@ionic/vue';
-import type { LeaderboardUser } from '../game/types';
+import type { LeaderboardUser, ShopItemType } from '../game/types';
 
 export function useFirebase() {
   const username = ref('Jugador');
   const userUid = ref('');
   const userHighScore = ref(0);
   const userCurrentLevel = ref(1);
+
+  // ─── Coins & Cosmetics ───────────────────────────────────────
+  const userCoins = ref(0);
+  const activeSkin = ref('default_fruits');
+  const activeBackground = ref('default_blue');
+  const unlockedSkins = ref<string[]>(['default_fruits']);
+  const unlockedBackgrounds = ref<string[]>(['default_blue']);
 
   // Leaderboard state
   const leaderboardList = ref<LeaderboardUser[]>([]);
@@ -50,6 +59,14 @@ export function useFirebase() {
         username.value = data.username || 'Jugador';
         userHighScore.value = data.highScore || 0;
         userCurrentLevel.value = data.currentLevel || 1;
+
+        // Load cosmetics data
+        userCoins.value = data.coins || 0;
+        activeSkin.value = data.activeSkin || 'default_fruits';
+        activeBackground.value = data.activeBackground || 'default_blue';
+        unlockedSkins.value = data.unlockedSkins || ['default_fruits'];
+        unlockedBackgrounds.value = data.unlockedBackgrounds || ['default_blue'];
+
         return {
           isNewUser: false,
           savedScore: userHighScore.value,
@@ -82,6 +99,11 @@ export function useFirebase() {
         username: cleanName,
         highScore: 0,
         currentLevel: 1,
+        coins: 0,
+        activeSkin: 'default_fruits',
+        activeBackground: 'default_blue',
+        unlockedSkins: ['default_fruits'],
+        unlockedBackgrounds: ['default_blue'],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -113,6 +135,104 @@ export function useFirebase() {
       });
     } catch (err) {
       console.warn('No se pudo actualizar progreso en Firestore:', err);
+    }
+  };
+
+  /**
+   * Add coins to the player's balance (called after winning a level).
+   */
+  const addCoins = async (amount: number) => {
+    if (!userUid.value || amount <= 0) return;
+
+    userCoins.value += amount;
+
+    try {
+      const userRef = doc(db, 'users', userUid.value);
+      await updateDoc(userRef, {
+        coins: increment(amount),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn('No se pudo agregar monedas:', err);
+    }
+  };
+
+  /**
+   * Purchase a cosmetic item — deducts coins and adds to inventory.
+   * Returns true on success, false on failure.
+   */
+  const purchaseItem = async (
+    itemId: string,
+    price: number,
+    type: ShopItemType,
+  ): Promise<boolean> => {
+    if (!userUid.value) return false;
+    if (userCoins.value < price) return false;
+
+    // Check not already owned
+    const owned = type === 'skin' ? unlockedSkins.value : unlockedBackgrounds.value;
+    if (owned.includes(itemId)) return false;
+
+    // Optimistic local update
+    userCoins.value -= price;
+    if (type === 'skin') {
+      unlockedSkins.value = [...unlockedSkins.value, itemId];
+    } else {
+      unlockedBackgrounds.value = [...unlockedBackgrounds.value, itemId];
+    }
+
+    try {
+      const userRef = doc(db, 'users', userUid.value);
+      const fieldName = type === 'skin' ? 'unlockedSkins' : 'unlockedBackgrounds';
+      await updateDoc(userRef, {
+        coins: increment(-price),
+        [fieldName]: arrayUnion(itemId),
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    } catch (err) {
+      // Rollback on error
+      userCoins.value += price;
+      if (type === 'skin') {
+        unlockedSkins.value = unlockedSkins.value.filter(id => id !== itemId);
+      } else {
+        unlockedBackgrounds.value = unlockedBackgrounds.value.filter(id => id !== itemId);
+      }
+      console.error('Error comprando ítem:', err);
+      return false;
+    }
+  };
+
+  /**
+   * Equip a cosmetic item (must already be owned).
+   */
+  const equipItem = async (
+    itemId: string,
+    type: ShopItemType,
+  ): Promise<boolean> => {
+    if (!userUid.value) return false;
+
+    const owned = type === 'skin' ? unlockedSkins.value : unlockedBackgrounds.value;
+    if (!owned.includes(itemId)) return false;
+
+    // Optimistic local update
+    if (type === 'skin') {
+      activeSkin.value = itemId;
+    } else {
+      activeBackground.value = itemId;
+    }
+
+    try {
+      const userRef = doc(db, 'users', userUid.value);
+      const fieldName = type === 'skin' ? 'activeSkin' : 'activeBackground';
+      await updateDoc(userRef, {
+        [fieldName]: itemId,
+        updatedAt: serverTimestamp(),
+      });
+      return true;
+    } catch (err) {
+      console.error('Error equipando ítem:', err);
+      return false;
     }
   };
 
@@ -186,10 +306,22 @@ export function useFirebase() {
     leaderboardList,
     userRank,
     isLeaderboardLoading,
+
+    // Coins & Cosmetics
+    userCoins,
+    activeSkin,
+    activeBackground,
+    unlockedSkins,
+    unlockedBackgrounds,
+
+    // Actions
     authenticateAndLoadProfile,
     registerNewUser,
     saveProgress,
     updateUsername,
     fetchLeaderboard,
+    addCoins,
+    purchaseItem,
+    equipItem,
   };
 }

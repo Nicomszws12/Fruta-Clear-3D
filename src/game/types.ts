@@ -95,3 +95,44 @@ export interface LeaderboardUser {
   updatedAt?: number | string;
   rank?: number;
 }
+
+// ─── Shop / Cosmetics Types ──────────────────────────────────
+
+/** Status of a shop item relative to the current player */
+export type ItemStatus = 'locked' | 'owned' | 'equipped';
+
+/** A skin set maps each tile key to an alternative emoji */
+export interface SkinEmojiMap {
+  [tileKey: string]: string;
+}
+
+/** Definition of a tile skin set */
+export interface SkinDefinition {
+  id: string;
+  name: string;
+  price: number;
+  /** 6 representative emojis shown in the shop preview */
+  preview: string[];
+  /** Full mapping of tile type keys → emoji overrides */
+  emojiMap: SkinEmojiMap;
+  /** Optional folder path for PNG images (future use) */
+  imageFolderPath?: string;
+}
+
+/** Definition of a background theme */
+export interface BackgroundDefinition {
+  id: string;
+  name: string;
+  price: number;
+  /** CSS gradient string applied to .game-layout */
+  gradient: string;
+  /** Repeating overlay pattern (optional) */
+  pattern?: string;
+  /** Accent color for decorative elements */
+  accentColor: string;
+  /** Preview emoji shown in shop */
+  previewEmoji: string;
+}
+
+/** Generic shop item (union for rendering) */
+export type ShopItemType = 'skin' | 'background';

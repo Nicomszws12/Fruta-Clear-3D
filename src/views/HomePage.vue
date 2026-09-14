@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import {
   IonPage,
   IonHeader,
@@ -9,13 +9,18 @@ import {
 } from '@ionic/vue';
 import { useGameState } from '../composables/useGameState';
 import { useFirebase } from '../composables/useFirebase';
+import { useShop } from '../composables/useShop';
 import { getAssetByKey } from '../game/tileAssets';
+import { getBackgroundById } from '../game/shopCatalog';
 import LeaderboardModal from '../components/LeaderboardModal.vue';
 import GameDialog from '../components/GameDialog.vue';
 import SettingsModal from '../components/SettingsModal.vue';
+import ShopModal from '../components/ShopModal.vue';
+import WorldMapModal from '../components/WorldMapModal.vue';
 import { playTap } from '../game/sounds';
 
 // ─── Composables ──────────────────────────────────────────────
+const firebase = useFirebase();
 const {
   username,
   userUid,
@@ -29,7 +34,15 @@ const {
   saveProgress,
   updateUsername,
   fetchLeaderboard,
-} = useFirebase();
+  userCoins,
+  activeSkin,
+  activeBackground,
+  unlockedSkins,
+  unlockedBackgrounds,
+  addCoins,
+} = firebase;
+
+const shop = useShop(firebase);
 
 const {
   boardTiles,
@@ -137,13 +150,66 @@ const promptEditNameFromSettings = async () => {
   await alert.present();
 };
 
+// ─── Shop Modal State ─────────────────────────────────────────
+const isShopOpen = ref(false);
+
+const openShop = () => {
+  playTap();
+  isShopOpen.value = true;
+};
+
+// ─── World Map Modal State ────────────────────────────────────
+const isMapOpen = ref(false);
+
+const openMap = () => {
+  playTap();
+  isMapOpen.value = true;
+};
+
+const handleSelectLevelFromMap = (lvl: number) => {
+  level.value = lvl;
+  score.value = 0;
+  generateBoard();
+};
+
+// ─── Coins earned per level (10 coins per win) ────────────────
+const COINS_PER_LEVEL = 10;
+const lastCoinsEarned = ref(0);
+
+// ─── Dynamic Background ──────────────────────────────────────
+const dynamicBgStyle = computed(() => {
+  const bg = getBackgroundById(activeBackground.value);
+  if (!bg) return {};
+  return {
+    background: `
+      radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, 0.22) 0%, transparent 65%),
+      repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.05) 0px,
+        rgba(255, 255, 255, 0.05) 24px,
+        transparent 24px,
+        transparent 48px
+      ),
+      ${bg.gradient}`,
+    backgroundSize: '100% 100%, 48px 48px, 100% 100%',
+  };
+});
+
+const dynamicBgColor = computed(() => {
+  const bg = getBackgroundById(activeBackground.value);
+  return bg?.accentColor || '#0284c7';
+});
+
 // ─── Win / Lose Alerts ────────────────────────────────────────
 watch(gameStatus, async (status) => {
   if (status === 'won') {
     const nextLvl = level.value + 1;
+    lastCoinsEarned.value = COINS_PER_LEVEL;
     await saveProgress(score.value, nextLvl);
+    await addCoins(COINS_PER_LEVEL);
     isWinOpen.value = true;
   } else if (status === 'lost') {
+    lastCoinsEarned.value = 0;
     await saveProgress(score.value, level.value);
     isLoseOpen.value = true;
   }
@@ -164,6 +230,8 @@ onMounted(async () => {
     } else {
       score.value = result.savedScore;
       level.value = result.savedLevel;
+      // Initialize equipped skin rendering
+      shop.initializeSkin();
       generateBoard();
     }
   } else {
@@ -191,11 +259,12 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- Center: Level & Progress Indicator -->
-          <div class="hud-level-box">
+          <!-- Center: Level & Progress Indicator (Clickable to open World Map) -->
+          <div class="hud-level-box" @click="openMap" title="Ver Mapa de Mundos y Niveles">
             <div class="hud-level-badge">
               <span class="level-icon">⭐</span>
               <span class="level-number">Nv. {{ level }}</span>
+              <span class="level-map-hint">🗺️</span>
             </div>
             <div class="hud-progress-bar-bg">
               <div
@@ -208,14 +277,27 @@ onMounted(async () => {
             </span>
           </div>
 
-          <!-- Right: Score & Action Buttons -->
+          <!-- Right: Coins, Score & Action Buttons -->
           <div class="hud-right">
+            <div class="hud-coin-chip" @click="openShop" title="Monedas — Abrir Tienda">
+              <span class="coin-icon">🪙</span>
+              <span class="coin-val">{{ formatScore(userCoins) }}</span>
+            </div>
+
             <div class="hud-score-chip">
-              <span class="score-coin">🪙</span>
+              <span class="score-coin">⭐</span>
               <span class="score-val">{{ formatScore(score) }}</span>
             </div>
 
             <div class="hud-actions">
+              <button class="hud-map-btn" @click="openMap" title="Mapa de Mundos">
+                <span class="btn-map">🗺️</span>
+              </button>
+
+              <button class="hud-shop-btn" @click="openShop" title="Tienda">
+                <span class="btn-shop">🛒</span>
+              </button>
+
               <button class="hud-leaderboard-btn" @click="openLeaderboard" title="Tabla de Clasificación">
                 <span class="btn-trophy">🏆</span>
               </button>
@@ -230,11 +312,12 @@ onMounted(async () => {
     </ion-header>
 
     <ion-content class="game-background" :scroll-y="false">
-      <div class="game-layout">
-        <!-- ════════ WORLD THEME HEADER ════════ -->
-        <div class="world-subbar">
+      <div class="game-layout" :style="dynamicBgStyle">
+        <!-- ════════ WORLD THEME HEADER (Clickable to open World Map) ════════ -->
+        <div class="world-subbar" @click="openMap" title="Ver Mapa de Mundos">
           <span class="world-name-tag">{{ worldName }}</span>
           <span class="archetype-name-tag">{{ levelName }}</span>
+          <span class="world-map-icon">🗺️</span>
         </div>
 
         <!-- ════════ FLOATING COMBO BANNER ════════ -->
@@ -411,6 +494,7 @@ onMounted(async () => {
       variant="win"
       :level="level"
       :bonus="lastLevelBonus"
+      :coins-earned="lastCoinsEarned"
       @next="handleNextLevel"
       @retry="handleRetryLevel"
     />
@@ -444,6 +528,31 @@ onMounted(async () => {
       :username="username"
       @update:is-open="isSettingsOpen = $event"
       @edit-name="promptEditNameFromSettings"
+    />
+
+    <!-- ════════ SHOP MODAL ════════ -->
+    <ShopModal
+      :is-open="isShopOpen"
+      :coins="userCoins"
+      :shop-skins="shop.shopSkins"
+      :shop-backgrounds="shop.shopBackgrounds"
+      :get-skin-status="shop.getSkinStatus"
+      :get-background-status="shop.getBackgroundStatus"
+      :can-afford="shop.canAfford"
+      @update:is-open="isShopOpen = $event"
+      @buy-skin="shop.buySkin($event)"
+      @buy-background="shop.buyBackground($event)"
+      @equip-skin="shop.equipSkin($event)"
+      @equip-background="shop.equipBackground($event)"
+    />
+
+    <!-- ════════ WORLD MAP MODAL ════════ -->
+    <WorldMapModal
+      :is-open="isMapOpen"
+      :current-level="level"
+      :max-unlocked-level="userCurrentLevel"
+      @update:is-open="isMapOpen = $event"
+      @select-level="handleSelectLevelFromMap"
     />
   </ion-page>
 </template>
@@ -548,6 +657,12 @@ onMounted(async () => {
   gap: 2px;
   flex-shrink: 0;
   min-width: 68px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.hud-level-box:active {
+  transform: scale(0.96);
 }
 
 .hud-level-badge {
@@ -562,6 +677,12 @@ onMounted(async () => {
 
 .level-icon {
   font-size: 10px;
+}
+
+.level-map-hint {
+  font-size: 8px;
+  margin-left: 2px;
+  opacity: 0.85;
 }
 
 .level-number {
@@ -638,6 +759,95 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+/* Coin Chip */
+.hud-coin-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1.5px solid #f59e0b;
+  padding: 3px 6px;
+  border-radius: 12px;
+  flex-shrink: 1;
+  min-width: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #d97706;
+  transition: transform 0.1s;
+}
+
+.hud-coin-chip:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #d97706;
+}
+
+.coin-icon {
+  font-size: 11px;
+}
+
+.coin-val {
+  font-family: var(--game-font, sans-serif);
+  font-size: 10px;
+  font-weight: 900;
+  color: #92400e;
+  white-space: nowrap;
+}
+
+/* Map Button */
+.hud-map-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #3b82f6;
+  border: 1.5px solid #1d4ed8;
+  box-shadow: 0 3px 0 #1e40af;
+  border-radius: 10px;
+  padding: 0;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.hud-map-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #1e40af;
+}
+
+.btn-map {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Shop Button */
+.hud-shop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #f59e0b;
+  border: 1.5px solid #d97706;
+  box-shadow: 0 3px 0 #b45309;
+  border-radius: 10px;
+  padding: 0;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.hud-shop-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #b45309;
+}
+
+.btn-shop {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .hud-leaderboard-btn {
   display: flex;
   align-items: center;
@@ -700,6 +910,12 @@ onMounted(async () => {
   gap: 8px;
   padding: 4px 12px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.world-subbar:active {
+  transform: scale(0.97);
 }
 
 .world-name-tag {
@@ -719,6 +935,11 @@ onMounted(async () => {
   font-size: 11px;
   color: #64748b;
   font-weight: 700;
+}
+
+.world-map-icon {
+  font-size: 12px;
+  opacity: 0.9;
 }
 
 /* ─── Main Game Layout ────────────────────────────────────── */

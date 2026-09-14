@@ -44,6 +44,10 @@
                     <span class="tag-label">Power-ups</span>
                     <span class="tag-val">+{{ bonus?.powerups || 0 }}</span>
                   </div>
+                  <div class="bonus-tag bonus-coins">
+                    <span class="tag-label">🪙 Monedas</span>
+                    <span class="tag-val">+{{ coinsEarned || 10 }}</span>
+                  </div>
                 </div>
               </div>
 
@@ -153,6 +157,7 @@ const props = defineProps<{
   level?: number;
   score?: number;
   bonus?: { base: number; powerups: number; total: number };
+  coinsEarned?: number;
 }>();
 
 const emit = defineEmits<{
@@ -425,6 +430,14 @@ const getConfettiStyle = (index: number) => {
   font-size: 13px;
   font-weight: 800;
   color: #10b981;
+}
+
+.bonus-coins .tag-val {
+  color: #d97706;
+}
+
+.bonus-coins .tag-label {
+  color: #92400e;
 }
 
 .lose-desc {

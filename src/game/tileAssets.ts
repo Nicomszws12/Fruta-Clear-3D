@@ -1,10 +1,11 @@
 /**
  * Tile visual assets — maps tile type keys to emojis and (future) images.
  *
- * To add image support, place PNGs/SVGs in `src/assets/tiles/`
- * and set the `imagePath` field on each TileAsset.
- * The template already handles the `<img>` vs emoji fallback.
+ * Supports dynamic skin switching: when a skin is equipped,
+ * getAssetByKey() returns the emoji from the active skin's mapping.
  */
+import { ref } from 'vue';
+import type { SkinEmojiMap } from './types';
 
 export interface TileAsset {
   /** Unique key used as the tile's `type` value */
@@ -60,9 +61,40 @@ export const TILE_ASSETS: TileAsset[] = [
 // Pre-indexed map for instant O(1) tile asset lookup
 const ASSET_MAP = new Map<string, TileAsset>(TILE_ASSETS.map(a => [a.key, a]));
 
-/** Look up a tile asset by its type key. Returns a fallback if not found. */
+// ─── Dynamic Skin System ─────────────────────────────────────
+
+/** The currently active skin's emoji override map (global reactive state) */
+const _activeSkinEmojiMap = ref<SkinEmojiMap | null>(null);
+
+/**
+ * Set the active skin's emoji mapping. Called by useShop when a skin is equipped.
+ * Pass `null` to reset to default emojis.
+ */
+export function setActiveSkinMap(map: SkinEmojiMap | null): void {
+  _activeSkinEmojiMap.value = map;
+}
+
+/**
+ * Look up a tile asset by its type key.
+ * If a skin is active, returns the skin's emoji override.
+ * Returns a fallback if the key is not found.
+ */
 export function getAssetByKey(key: string): TileAsset {
-  return ASSET_MAP.get(key) ?? { key, emoji: '❓', label: key };
+  const base = ASSET_MAP.get(key);
+  if (!base) return { key, emoji: '❓', label: key };
+
+  // If an active skin provides an emoji override for this key, use it
+  const skinMap = _activeSkinEmojiMap.value;
+  if (skinMap && skinMap[key]) {
+    return {
+      ...base,
+      emoji: skinMap[key],
+      // Clear imagePath so the emoji is shown, not the default image
+      imagePath: undefined,
+    };
+  }
+
+  return base;
 }
 
 /**
