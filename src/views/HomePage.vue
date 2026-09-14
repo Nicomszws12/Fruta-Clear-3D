@@ -1032,7 +1032,7 @@ onMounted(async () => {
   justify-content: center;
   flex: 1 1 auto;
   width: 100%;
-  padding: 2px 6px;
+  padding: 2px 4px;
   box-sizing: border-box;
   z-index: 2;
   min-height: 0;
@@ -1044,7 +1044,7 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.88);
   border: 3px solid #ffffff;
   border-radius: 24px;
-  padding: 10px 8px;
+  padding: 8px 6px;
   box-shadow: 
     0 8px 0 rgba(2, 132, 199, 0.5),
     0 18px 28px rgba(0, 0, 0, 0.22);
@@ -1060,7 +1060,7 @@ onMounted(async () => {
   outline-offset: -6px;
   transition: all 0.3s ease;
   margin: auto;
-  max-width: 96vw;
+  max-width: 98vw;
   box-sizing: border-box;
 }
 
@@ -1079,12 +1079,12 @@ onMounted(async () => {
 .corner-br { bottom: 4px; right: 6px; }
 
 .board-container {
-  /* Dynamic Responsive Tile Size: strictly balances width & vertical space */
+  /* Dynamic Responsive Tile Size: enlarged to maximize visibility and ease of tapping */
   --tile-size: min(
-    calc((100vw - 36px) / var(--grid-cols)),
-    calc((100dvh - 270px) / var(--grid-rows)),
-    calc((100vh - 270px) / var(--grid-rows)),
-    50px
+    calc((100vw - 20px) / var(--grid-cols)),
+    calc((100dvh - 200px) / var(--grid-rows)),
+    calc((100vh - 200px) / var(--grid-rows)),
+    64px
   );
 
   position: relative;
@@ -1174,14 +1174,14 @@ onMounted(async () => {
 
 /* Emoji / Image in Tile */
 .tile-emoji {
-  font-size: calc(var(--tile-size) * 0.55);
+  font-size: calc(var(--tile-size) * 0.62);
   line-height: 1;
   pointer-events: none;
 }
 
 .tile-img {
-  width: 70%;
-  height: 70%;
+  width: 76%;
+  height: 76%;
   object-fit: contain;
   pointer-events: none;
 }
@@ -1370,7 +1370,7 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  max-height: 52px;
+  max-height: 54px;
 }
 
 .tray-tile {
@@ -1383,12 +1383,12 @@ onMounted(async () => {
 }
 
 .tray-tile .tile-emoji {
-  font-size: min(5vw, 24px);
+  font-size: min(5.5vw, 26px);
 }
 
 .tray-tile .tile-img {
-  width: 65%;
-  height: 65%;
+  width: 72%;
+  height: 72%;
   object-fit: contain;
 }
 
