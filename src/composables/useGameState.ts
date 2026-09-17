@@ -20,7 +20,7 @@ import {
 } from '../game/boardEngine';
 import { createInitialPowerUpState, performUndo } from '../game/powerUps';
 import { getAvailableTypes } from '../game/tileAssets';
-import { playClick, playMatch, playCombo, playWin, playLose, playPowerup } from '../game/sounds';
+import { playClick, playTap, playMatch, playCombo, playWin, playLose, playPowerup } from '../game/sounds';
 
 export interface ComboBanner {
   id: number;
@@ -49,6 +49,7 @@ export function useGameState() {
   const powerUpState = ref<PowerUpState>(createInitialPowerUpState(1));
   const gameStatus = ref<GameStatus>('playing');
   const hintedTileIds = ref<Set<string>>(new Set());
+  const wigglingTileId = ref<string | null>(null);
   const isAnimating = ref(false);
 
   // Stats & Progress
@@ -83,6 +84,7 @@ export function useGameState() {
     tray.value = [];
     moveHistory.value = [];
     hintedTileIds.value = new Set();
+    wigglingTileId.value = null;
     powerUpState.value = createInitialPowerUpState(level.value);
     gameStatus.value = 'playing';
     isAnimating.value = false;
@@ -93,8 +95,18 @@ export function useGameState() {
 
   // ─── Tile Selection ────────────────────────────────────────
   const selectTile = (tile: Tile) => {
+    if (tile.isBlocked) {
+      playTap();
+      wigglingTileId.value = tile.id;
+      setTimeout(() => {
+        if (wigglingTileId.value === tile.id) {
+          wigglingTileId.value = null;
+        }
+      }, 240);
+      return;
+    }
+
     if (
-      tile.isBlocked ||
       tray.value.length >= MAX_TRAY ||
       gameStatus.value !== 'playing' ||
       isAnimating.value
@@ -380,6 +392,7 @@ export function useGameState() {
     powerUpState,
     gameStatus,
     hintedTileIds,
+    wigglingTileId,
     isAnimating,
     MAX_TRAY,
 

@@ -53,6 +53,7 @@ const {
   powerUpState,
   gameStatus,
   hintedTileIds,
+  wigglingTileId,
   isAnimating,
   MAX_TRAY,
   totalLevelTiles,
@@ -355,6 +356,7 @@ onMounted(async () => {
                 :class="{
                   'is-blocked': tile.isBlocked,
                   'is-hinted': hintedTileIds.has(tile.id),
+                  'is-wiggling': wigglingTileId === tile.id,
                 }"
                 :style="{
                   left: `calc(${tile.gridX} * var(--tile-size))`,
@@ -1102,9 +1104,19 @@ onMounted(async () => {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transform: translateZ(0);
+  transform: translate(calc(var(--tile-z, 0) * -1.5px), calc(var(--tile-z, 0) * -1.5px));
   will-change: transform;
-  transition: transform 0.1s ease, opacity 0.1s ease;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+@keyframes tileWiggle {
+  0%, 100% { transform: translate(calc(var(--tile-z, 0) * -1.5px), calc(var(--tile-z, 0) * -1.5px)) rotate(0deg); }
+  25% { transform: translate(calc(var(--tile-z, 0) * -1.5px - 3px), calc(var(--tile-z, 0) * -1.5px)) rotate(-4deg); }
+  75% { transform: translate(calc(var(--tile-z, 0) * -1.5px + 3px), calc(var(--tile-z, 0) * -1.5px)) rotate(4deg); }
+}
+
+.tile.is-wiggling {
+  animation: tileWiggle 0.22s ease;
 }
 
 .tile-face {
@@ -1138,21 +1150,23 @@ onMounted(async () => {
     0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
-/* Blocked Tile (dimmed and locked) */
+/* Blocked Tile: soft ambient shading to indicate lower layer, but keeping fruit colors vibrant and icons crystal clear! */
 .tile.is-blocked .tile-face {
-  filter: brightness(0.48) grayscale(0.4);
+  filter: brightness(0.82) saturate(0.92);
   cursor: not-allowed;
   box-shadow:
-    1px 1px 0px #888,
-    0 2px 4px rgba(0, 0, 0, 0.4);
+    inset 0 1px 1px rgba(255, 255, 255, 0.6),
+    1px 2px 0px #b4b8c6,
+    0 2px 4px rgba(0, 0, 0, 0.22);
 }
 
 .blocked-lock-overlay {
   position: absolute;
   bottom: 2px;
   right: 2px;
-  font-size: calc(var(--tile-size) * 0.22);
-  opacity: 0.65;
+  font-size: calc(var(--tile-size) * 0.16);
+  opacity: 0.40;
+  pointer-events: none;
 }
 
 /* Hint glow */

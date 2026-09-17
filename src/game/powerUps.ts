@@ -12,11 +12,12 @@ import { computeBlockedStatus } from './boardEngine';
  * Create the initial power-up allowances for a level.
  * Could be made dynamic per-level in the future.
  */
-export function createInitialPowerUpState(_level: number): PowerUpState {
+export function createInitialPowerUpState(level: number): PowerUpState {
+  const isHighLevel = level >= 30;
   return {
-    undoCount: 3,
-    shuffleCount: 2,
-    hintCount: 1,
+    undoCount: isHighLevel ? 5 : 4,
+    shuffleCount: isHighLevel ? 4 : 3,
+    hintCount: isHighLevel ? 4 : 3,
   };
 }
 

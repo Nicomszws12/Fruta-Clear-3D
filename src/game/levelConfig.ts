@@ -356,6 +356,38 @@ function computeGridExtent(layers: LayerConfig[]): {
   };
 }
 
+/**
+ * Compute staggered offsets per layer z so NO two layers ever align directly on top of each other.
+ * Each layer is physically shifted by 0.30 - 0.35 grid units, exposing at least ~35% of any lower tile
+ * so the player can always identify what is underneath!
+ */
+function getLayerOffset(
+  z: number,
+  baseCols: number,
+  baseRows: number,
+  layerCols: number,
+  layerRows: number,
+): { offsetX: number; offsetY: number } {
+  const centerX = (baseCols - layerCols) * 0.5;
+  const centerY = (baseRows - layerRows) * 0.5;
+
+  const staggers = [
+    { x: 0,    y: 0 },
+    { x: 0.35, y: 0.35 },
+    { x: 0.70, y: 0.35 },
+    { x: 0.35, y: 0.70 },
+    { x: 0.55, y: 0.20 },
+    { x: 0.20, y: 0.50 },
+    { x: 0.60, y: 0.60 },
+  ];
+  const s = staggers[z % staggers.length];
+
+  return {
+    offsetX: Number((centerX + s.x).toFixed(2)),
+    offsetY: Number((centerY + s.y).toFixed(2)),
+  };
+}
+
 // ─── Procedural Level Generator (1 to 100+) ───────────────────
 
 export function getLevelConfig(level: number): LevelConfig {
@@ -364,32 +396,35 @@ export function getLevelConfig(level: number): LevelConfig {
   const archetypeIdx = (safeLevel - 1) % ARCHETYPES.length;
   const archetype = ARCHETYPES[archetypeIdx];
 
-  // 1. Dificultad Progresiva (1-1000):
-  // - Niveles 1-11:     3 capas, 6-8 tipos,  ~30-45 fichas
-  // - Niveles 12-39:    4 capas, 9-14 tipos,  ~48-75 fichas
-  // - Niveles 40-99:    5 capas, 15-18 tipos, ~78-114 fichas
-  // - Niveles 100-249:  5-6 capas, 18-20 tipos, ~120-165 fichas
-  // - Niveles 250-499:  6 capas, 20-22 tipos, ~150-180 fichas
-  // - Niveles 500-749:  6-7 capas, 22-23 tipos, ~165-210 fichas
-  // - Niveles 750-1000: 7 capas, 23-24 tipos, ~200-240 fichas
+  // 1. Dificultad Progresiva y Equilibrada (1-1000):
+  // Diseñada para ser entretenida y accesible para todo público.
+  // Con una bandeja de 7 casillas, el número de tipos de fichas nunca debe superar 12
+  // para evitar bloqueos matemáticos inevitables.
+  //
+  // - Niveles 1-15:    3 capas, 5-6 tipos,  ~24-33 fichas
+  // - Niveles 16-35:   3 capas, 6-7 tipos,  ~33-45 fichas
+  // - Niveles 36-60:   4 capas, 7-8 tipos,  ~45-54 fichas
+  // - Niveles 61-90:   4 capas, 9-10 tipos, ~54-63 fichas (Nivel 72 tiene 4 capas y 10 tipos!)
+  // - Niveles 91-150:  4 capas, 10-11 tipos,~63-75 fichas
+  // - Niveles 151-300: 4-5 capas, 11-12 tipos,~75-90 fichas
+  // - Niveles 300+:    5 capas, 12 tipos (tope estricto), ~90-108 fichas
   let targetLayers = 3;
-  if (safeLevel >= 12) targetLayers = 4;
-  if (safeLevel >= 40) targetLayers = 5;
-  if (safeLevel >= 100) targetLayers = 5 + (safeLevel >= 200 ? 1 : 0);
-  if (safeLevel >= 500) targetLayers = 6 + (safeLevel >= 750 ? 1 : 0);
+  if (safeLevel >= 36) targetLayers = 4;
+  if (safeLevel >= 150 && safeLevel % 10 === 0) targetLayers = 5;
+  if (safeLevel >= 300) targetLayers = 5;
 
-  // Base dimensions (constrained for mobile screens: 5 to 8 cols/rows max)
-  const progressDim = Math.min(safeLevel, 400);
-  const baseCols = Math.min(8, 5 + Math.floor(progressDim / 100));
-  const baseRows = Math.min(8, 5 + Math.floor(progressDim / 100));
+  // Dimensiones base adaptadas a pantallas móviles (5 a 7 columnas/filas)
+  const progressDim = Math.min(safeLevel, 300);
+  const baseCols = Math.min(7, 5 + Math.floor(progressDim / 150));
+  const baseRows = Math.min(7, 5 + Math.floor(progressDim / 150));
 
-  // Tile type count (from 6 up to 24) - Minimum 6 ensures the 7-slot tray can fill up and lose!
+  // Cantidad equilibrada de tipos de fichas (de 5 a 12 máximo)
   const tileTypeCount = Math.min(
-    24,
-    Math.max(6, 6 + Math.floor(safeLevel / 4)),
+    12,
+    Math.max(5, 5 + Math.floor((safeLevel - 1) / 14)),
   );
 
-  // 2. Build Layers (pyramid stacking)
+  // 2. Build Layers (staggered pyramid stacking)
   const layers: LayerConfig[] = [];
   for (let z = 0; z < targetLayers; z++) {
     // Top layers decrease slightly in dimensions for a true 3D pyramid effect
@@ -397,9 +432,14 @@ export function getLevelConfig(level: number): LevelConfig {
     const layerCols = Math.max(3, baseCols - shrink);
     const layerRows = Math.max(3, baseRows - shrink);
 
-    // Centered offsets so stacked layers align pleasingly
-    const offsetX = (baseCols - layerCols) * 0.5 + (z % 2 === 1 ? 0.5 : 0);
-    const offsetY = (baseRows - layerRows) * 0.5 + (z % 2 === 1 ? 0.5 : 0);
+    // Staggered offsets: guarantees that lower tiles are never 100% hidden
+    const { offsetX, offsetY } = getLayerOffset(
+      z,
+      baseCols,
+      baseRows,
+      layerCols,
+      layerRows,
+    );
 
     let mask: boolean[][] | undefined;
     if (z === 0) {
@@ -426,10 +466,10 @@ export function getLevelConfig(level: number): LevelConfig {
   // 3. Guarantee totalTiles is a multiple of 3
   let currentTotal = layers.reduce((acc, l) => acc + countLayerTiles(l), 0);
 
-  // Minimum tiles according to level progression (at least 27, up to 240)
+  // Cantidad de fichas equilibrada (de 24 a 108 fichas máximo)
   const minRequiredTiles = Math.min(
-    240,
-    Math.max(27, 27 + Math.floor((safeLevel - 1) * 0.25) * 3),
+    108,
+    Math.max(24, 24 + Math.floor((safeLevel - 1) * 0.16) * 3),
   );
 
   // If currentTotal is below minRequiredTiles, fill in some false mask cells
