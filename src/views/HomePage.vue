@@ -40,6 +40,8 @@ const {
   unlockedSkins,
   unlockedBackgrounds,
   addCoins,
+  restoreProfileByNicknameOrId,
+  getLocalSave,
 } = firebase;
 
 const shop = useShop(firebase);
@@ -151,6 +153,48 @@ const promptEditNameFromSettings = async () => {
   await alert.present();
 };
 
+const promptRestoreProgressFromSettings = async () => {
+  isSettingsOpen.value = false;
+  const alert = await alertController.create({
+    header: 'Recuperar Partida 🔄',
+    subHeader: 'Restaura tu nivel y monedas',
+    message: 'Ingresa tu apodo anterior (ej. Cecilia19) o tu ID de jugador para recuperar tu partida guardada:',
+    inputs: [
+      {
+        name: 'targetInput',
+        type: 'text',
+        placeholder: 'Ej: Cecilia19',
+        value: username.value === 'Jugador' ? 'Cecilia19' : username.value,
+      },
+    ],
+    buttons: [
+      { text: 'Cancelar', role: 'cancel' },
+      {
+        text: 'Recuperar',
+        handler: async (data: Record<string, string>) => {
+          const target = (data.targetInput || '').trim();
+          if (target) {
+            const res = await restoreProfileByNicknameOrId(target);
+            const feedbackAlert = await alertController.create({
+              header: res.success ? '¡Éxito! 🎉' : 'Aviso',
+              message: res.message,
+              buttons: ['Aceptar'],
+            });
+            await feedbackAlert.present();
+            if (res.success && typeof res.restoredLevel === 'number') {
+              level.value = res.restoredLevel;
+              score.value = res.restoredScore || 0;
+              shop.initializeSkin();
+              generateBoard();
+            }
+          }
+        },
+      },
+    ],
+  });
+  await alert.present();
+};
+
 // ─── Shop Modal State ─────────────────────────────────────────
 const isShopOpen = ref(false);
 
@@ -223,6 +267,13 @@ const formatScore = (num: number) => {
 
 // ─── Init ─────────────────────────────────────────────────────
 onMounted(async () => {
+  // Pre-cargar progreso guardado localmente de inmediato (nunca cae a nivel 1 por red lenta u offline)
+  const cached = getLocalSave();
+  if (cached && typeof cached.currentLevel === 'number' && cached.currentLevel > 1) {
+    level.value = cached.currentLevel;
+    score.value = cached.highScore || 0;
+  }
+
   const result = await authenticateAndLoadProfile();
   if (result) {
     if (result.isNewUser) {
@@ -236,7 +287,8 @@ onMounted(async () => {
       generateBoard();
     }
   } else {
-    // Fallback if network fails
+    // Fallback si la red falla: arranca con el nivel guardado localmente
+    shop.initializeSkin();
     generateBoard();
   }
 });
@@ -522,8 +574,11 @@ onMounted(async () => {
     <SettingsModal
       :is-open="isSettingsOpen"
       :username="username"
+      :user-uid="userUid"
+      :current-level="level"
       @update:is-open="isSettingsOpen = $event"
       @edit-name="promptEditNameFromSettings"
+      @restore-progress="promptRestoreProgressFromSettings"
     />
 
     <!-- ════════ SHOP MODAL ════════ -->

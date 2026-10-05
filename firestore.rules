@@ -1,0 +1,139 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: users
+// Document ID: {userId} (matches Firebase Auth UID)
+// Fields:
+//   - username: string (required, 1-30 chars) - Player display nickname
+//   - highScore: number (required, >= 0, <= 1,000,000,000) - Player's highest score
+//   - currentLevel: number (required, >= 1, <= 100,000) - Highest unlocked level
+//   - coins: number (required, >= 0, <= 1,000,000,000) - In-game coin currency balance
+//   - activeSkin: string (required, 1-50 chars, must be in unlockedSkins) - Equipped skin ID
+//   - activeBackground: string (required, 1-50 chars, must be in unlockedBackgrounds) - Equipped background ID
+//   - unlockedSkins: list of strings (required, 1-100 items) - IDs of unlocked skins
+//   - unlockedBackgrounds: list of strings (required, 1-100 items) - IDs of unlocked backgrounds
+//   - createdAt: timestamp (required, immutable) - Document creation time
+//   - updatedAt: timestamp (required) - Document last update time
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the user owns the resource matching the document ID
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validate that required fields exist
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate that immutable fields have not changed on update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators (Validator Function Pattern)
+    // ===============================================================
+
+    // Validate complete users entity schema, data types, and bounds
+    function isValidUser(data) {
+      return hasOnlyAllowedFields([
+               'username',
+               'highScore',
+               'currentLevel',
+               'coins',
+               'activeSkin',
+               'activeBackground',
+               'unlockedSkins',
+               'unlockedBackgrounds',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             hasRequiredFields([
+               'username',
+               'highScore',
+               'currentLevel',
+               'coins',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             // Nickname bounds
+             data.username is string &&
+             data.username.size() >= 1 &&
+             data.username.size() <= 30 &&
+             // Numeric ranges
+             data.highScore is number &&
+             data.highScore >= 0 &&
+             data.highScore <= 1000000000 &&
+             data.currentLevel is number &&
+             data.currentLevel >= 1 &&
+             data.currentLevel <= 100000 &&
+             data.coins is number &&
+             data.coins >= 0 &&
+             data.coins <= 1000000000 &&
+             // Cosmetics string lengths (optional for legacy documents compatibility)
+             (!('activeSkin' in data) || (data.activeSkin is string && data.activeSkin.size() >= 1 && data.activeSkin.size() <= 50)) &&
+             (!('activeBackground' in data) || (data.activeBackground is string && data.activeBackground.size() >= 1 && data.activeBackground.size() <= 50)) &&
+             // Inventory list size limits (optional for legacy documents compatibility)
+             (!('unlockedSkins' in data) || (data.unlockedSkins is list && data.unlockedSkins.size() >= 1 && data.unlockedSkins.size() <= 100)) &&
+             (!('unlockedBackgrounds' in data) || (data.unlockedBackgrounds is list && data.unlockedBackgrounds.size() >= 1 && data.unlockedBackgrounds.size() <= 100)) &&
+             // Inventory integrity: active cosmetic must be in unlocked list if both exist
+             (!('activeSkin' in data && 'unlockedSkins' in data) || (data.activeSkin in data.unlockedSkins)) &&
+             (!('activeBackground' in data && 'unlockedBackgrounds' in data) || (data.activeBackground in data.unlockedBackgrounds)) &&
+             // Timestamps
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Default Deny: all reads and writes blocked by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // Any authenticated player can read user profiles (supports Leaderboard query)
+      allow read: if isAuthenticated();
+
+      // Only the authenticated owner can create their own profile
+      allow create: if isOwner(userId) &&
+                       isValidUser(request.resource.data) &&
+                       request.resource.data.createdAt <= request.time;
+
+      // Only the owner can update their profile; enforce schema validity and createdAt immutability
+      allow update: if isOwner(userId) &&
+                       isValidUser(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['createdAt']);
+
+      // Disallow user profile deletion
+      allow delete: if false;
+    }
+  }
+}

@@ -5,11 +5,14 @@ import { playClick, playSwitch } from '../game/sounds';
 defineProps<{
   isOpen: boolean;
   username: string;
+  userUid?: string;
+  currentLevel?: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
   (e: 'edit-name'): void;
+  (e: 'restore-progress'): void;
 }>();
 
 const {
@@ -49,6 +52,11 @@ const handleToggleVib = () => {
 const handleEditName = () => {
   playClick();
   emit('edit-name');
+};
+
+const handleRestoreProgress = () => {
+  playClick();
+  emit('restore-progress');
 };
 </script>
 
@@ -152,6 +160,17 @@ const handleEditName = () => {
                   </div>
                   <button class="btn-edit-profile" @click="handleEditName">
                     <span>✏️ Cambiar</span>
+                  </button>
+                </div>
+
+                <!-- Recovery Row -->
+                <div class="setting-row player-row recovery-row">
+                  <div class="player-info">
+                    <span class="row-label">Nivel Actual: <strong class="lvl-highlight">{{ currentLevel || 1 }}</strong></span>
+                    <span class="row-desc">Restaura tu nivel anterior</span>
+                  </div>
+                  <button class="btn-restore-profile" @click="handleRestoreProgress">
+                    <span>🔄 Recuperar</span>
                   </button>
                 </div>
               </div>
@@ -499,6 +518,37 @@ const handleEditName = () => {
 .btn-edit-profile:active {
   transform: translateY(2px);
   box-shadow: 0 1px 0 #0369a1;
+}
+
+.recovery-row {
+  margin-top: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.lvl-highlight {
+  color: #059669;
+}
+
+.btn-restore-profile {
+  background: #10b981;
+  border: 1.5px solid #059669;
+  box-shadow: 0 3px 0 #047857;
+  border-radius: 12px;
+  color: #ffffff;
+  font-family: var(--game-font, sans-serif);
+  font-size: 9px;
+  font-weight: 900;
+  padding: 5px 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.btn-restore-profile:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #047857;
 }
 
 /* ─── Developer Signature Card ─── */
