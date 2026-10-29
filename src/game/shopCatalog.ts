@@ -5,7 +5,7 @@
  * allowing instant visual re-theming without altering game logic.
  */
 
-import type { SkinDefinition, BackgroundDefinition } from './types';
+import type { SkinDefinition, BackgroundDefinition, PowerUpPackDefinition } from './types';
 
 /** Default equipped skin ID */
 export const DEFAULT_SKIN_ID = 'default_fruits';
@@ -283,3 +283,42 @@ export function getSkinById(id: string): SkinDefinition | undefined {
 export function getBackgroundById(id: string): BackgroundDefinition | undefined {
   return BACKGROUND_MAP.get(id);
 }
+
+/**
+ * Purchasable power-up packs for in-game retention economy.
+ */
+export const SHOP_POWERUP_PACKS: PowerUpPackDefinition[] = [
+  {
+    id: 'pack_undo_3',
+    name: 'Pack Deshacer (+3)',
+    description: 'Suma +3 usos de Deshacer a tu reserva actual.',
+    icon: '↩️',
+    price: 15,
+    rewards: { undo: 3, shuffle: 0, hint: 0 },
+  },
+  {
+    id: 'pack_shuffle_3',
+    name: 'Pack Mezclar (+3)',
+    description: 'Suma +3 usos de Mezclar garantizando solvabilidad.',
+    icon: '🔀',
+    price: 20,
+    rewards: { undo: 0, shuffle: 3, hint: 0 },
+  },
+  {
+    id: 'pack_hint_3',
+    name: 'Pack Varita (+3)',
+    description: 'Suma +3 Varitas Mágicas para completar tríos.',
+    icon: '✨',
+    price: 25,
+    rewards: { undo: 0, shuffle: 0, hint: 3 },
+  },
+  {
+    id: 'pack_master_bundle',
+    name: 'Pack Maestro (+2 Todo)',
+    description: '¡Ahorra monedas! +2 Deshacer, +2 Mezclar y +2 Varitas.',
+    icon: '🎁',
+    price: 35,
+    rewards: { undo: 2, shuffle: 2, hint: 2 },
+  },
+];
+

@@ -103,9 +103,25 @@ service cloud.firestore {
              // Inventory integrity: active cosmetic must be in unlocked list if both exist
              (!('activeSkin' in data && 'unlockedSkins' in data) || (data.activeSkin in data.unlockedSkins)) &&
              (!('activeBackground' in data && 'unlockedBackgrounds' in data) || (data.activeBackground in data.unlockedBackgrounds)) &&
-             // Timestamps
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp;
+      // Timestamps
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Validate initial creation economy limits (prevents arbitrary maxing on first write)
+    function isValidInitialEconomy(data) {
+      return data.coins <= 2000 &&
+             data.currentLevel <= 500 &&
+             data.highScore <= 500000;
+    }
+
+    // Validate progressive economy bounds on update (prevents client-side 1e9 tampering)
+    function isValidEconomyUpdate(oldData, newData) {
+      return newData.currentLevel >= oldData.currentLevel &&
+             newData.currentLevel <= oldData.currentLevel + 5 &&
+             newData.highScore >= oldData.highScore &&
+             newData.highScore <= oldData.highScore + 50000 &&
+             newData.coins <= oldData.coins + 250;
     }
 
     // ===============================================================
@@ -122,14 +138,16 @@ service cloud.firestore {
       // Any authenticated player can read user profiles (supports Leaderboard query)
       allow read: if isAuthenticated();
 
-      // Only the authenticated owner can create their own profile
+      // Only the authenticated owner can create their own profile with bounded initial economy
       allow create: if isOwner(userId) &&
                        isValidUser(request.resource.data) &&
+                       isValidInitialEconomy(request.resource.data) &&
                        request.resource.data.createdAt <= request.time;
 
-      // Only the owner can update their profile; enforce schema validity and createdAt immutability
+      // Only the owner can update their profile; enforce schema, immutability, and anti-cheat delta bounds
       allow update: if isOwner(userId) &&
                        isValidUser(request.resource.data) &&
+                       isValidEconomyUpdate(resource.data, request.resource.data) &&
                        areImmutableFieldsUnchanged(['createdAt']);
 
       // Disallow user profile deletion

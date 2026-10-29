@@ -96,7 +96,7 @@ export interface LeaderboardUser {
   rank?: number;
 }
 
-// ─── Shop / Cosmetics Types ──────────────────────────────────
+// ─── Shop / Cosmetics / Power-up Packs Types ─────────────────
 
 /** Status of a shop item relative to the current player */
 export type ItemStatus = 'locked' | 'owned' | 'equipped';
@@ -136,3 +136,44 @@ export interface BackgroundDefinition {
 
 /** Generic shop item (union for rendering) */
 export type ShopItemType = 'skin' | 'background';
+
+/** Purchasable power-up pack in the shop */
+export interface PowerUpPackDefinition {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  price: number;
+  rewards: {
+    undo: number;
+    shuffle: number;
+    hint: number;
+  };
+}
+
+/** Daily mission definition & state */
+export type DailyMissionType = 'levels_won' | 'combos' | 'tiles_cleared';
+
+export interface DailyMission {
+  id: string;
+  type: DailyMissionType;
+  title: string;
+  description: string;
+  icon: string;
+  target: number;
+  progress: number;
+  rewardCoins: number;
+  claimed: boolean;
+}
+
+/** Mid-level board persistence snapshot */
+export interface MidLevelSaveState {
+  level: number;
+  sessionScore: number;
+  boardTiles: Tile[];
+  tray: Tile[];
+  moveHistory: MoveRecord[];
+  powerUpState: PowerUpState;
+  totalLevelTiles: number;
+  savedAt: number;
+}

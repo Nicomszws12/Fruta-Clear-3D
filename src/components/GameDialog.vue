@@ -1,40 +1,44 @@
 <template>
   <Teleport to="body">
     <Transition name="dialog-fade">
-      <div v-if="isOpen" class="dialog-backdrop">
+      <div
+        v-if="isOpen"
+        class="dialog-backdrop"
+        role="dialog"
+        aria-modal="true"
+        @click.self="variant === 'pause' ? $emit('resume') : undefined"
+      >
         <!-- Confetti for win celebration -->
-        <div v-if="variant === 'win'" class="confetti-container">
+        <div v-if="variant === 'win'" class="confetti-container" aria-hidden="true">
           <div v-for="i in 36" :key="i" class="confetti" :style="getConfettiStyle(i)"></div>
         </div>
 
         <Transition name="dialog-pop">
           <div v-if="isOpen" class="dialog-card" :class="`variant-${variant}`">
-            
             <!-- ════════════════ WIN DIALOG (Kenney Blue Reward Card) ════════════════ -->
             <template v-if="variant === 'win'">
-              <!-- 3 Protruding Stars at the top -->
-              <div class="stars-crown">
+              <div class="stars-crown" aria-hidden="true">
                 <div class="star-wrapper star-left">
-                  <img src="/assets/ui/Yellow/Double/star.png" alt="Star" class="star-img" />
+                  <img src="/assets/ui/Yellow/Double/star.png" alt="" class="star-img" />
                 </div>
                 <div class="star-wrapper star-center">
-                  <img src="/assets/ui/Yellow/Double/star.png" alt="Star" class="star-img star-big" />
+                  <img src="/assets/ui/Yellow/Double/star.png" alt="" class="star-img star-big" />
                 </div>
                 <div class="star-wrapper star-right">
-                  <img src="/assets/ui/Yellow/Double/star.png" alt="Star" class="star-img" />
+                  <img src="/assets/ui/Yellow/Double/star.png" alt="" class="star-img" />
                 </div>
               </div>
 
-              <!-- Card Header -->
               <div class="card-title">
                 <h2>NIVEL {{ level || 1 }}</h2>
               </div>
 
-              <!-- Inner Reward Box (Gold border) -->
               <div class="inner-box gold-border">
-                <span class="box-subtitle">TU RECOMPENSA</span>
+                <span class="box-subtitle">
+                  {{ (coinsEarned ?? 10) > 0 ? 'TU RECOMPENSA' : 'NIVEL REJUGADO (SIN MONEDAS EXTRA)' }}
+                </span>
                 <div class="reward-pts">+{{ formatScore(bonus?.total || 0) }} PTS</div>
-                
+
                 <div class="bonus-details">
                   <div class="bonus-tag">
                     <span class="tag-label">Base</span>
@@ -46,19 +50,28 @@
                   </div>
                   <div class="bonus-tag bonus-coins">
                     <span class="tag-label">🪙 Monedas</span>
-                    <span class="tag-val">+{{ coinsEarned || 10 }}</span>
+                    <span class="tag-val">+{{ coinsEarned ?? 10 }}</span>
                   </div>
                 </div>
               </div>
 
-              <!-- Action Buttons (Round Kenney Yellow Buttons) -->
               <div class="bottom-action-buttons">
-                <!-- Retry level -->
-                <button class="round-btn round-yellow" @click="$emit('retry')" title="Repetir Nivel">
+                <button
+                  type="button"
+                  class="round-btn round-yellow"
+                  @click="$emit('retry')"
+                  title="Repetir Nivel"
+                  aria-label="Repetir Nivel"
+                >
                   <img src="/assets/ui/Extra/Double/icon_repeat_dark.png" alt="Reintentar" class="round-icon" />
                 </button>
-                <!-- Next level -->
-                <button class="round-btn round-yellow play-btn" @click="$emit('next')" title="Siguiente Nivel">
+                <button
+                  type="button"
+                  class="round-btn round-yellow play-btn"
+                  @click="$emit('next')"
+                  title="Siguiente Nivel"
+                  aria-label="Siguiente Nivel"
+                >
                   <img src="/assets/ui/Extra/Double/icon_play_dark.png" alt="Siguiente" class="round-icon play-icon" />
                 </button>
               </div>
@@ -66,55 +79,84 @@
 
             <!-- ════════════════ LOSE DIALOG (Kenney Red Warning Card) ════════════════ -->
             <template v-else-if="variant === 'lose'">
-              <!-- Grey Stars at the top -->
-              <div class="stars-crown">
+              <div class="stars-crown" aria-hidden="true">
                 <div class="star-wrapper star-left">
-                  <img src="/assets/ui/Grey/Double/star.png" alt="Star" class="star-img" />
+                  <img src="/assets/ui/Grey/Double/star.png" alt="" class="star-img" />
                 </div>
                 <div class="star-wrapper star-center">
-                  <img src="/assets/ui/Grey/Double/star.png" alt="Star" class="star-img star-big" />
+                  <img src="/assets/ui/Grey/Double/star.png" alt="" class="star-img star-big" />
                 </div>
                 <div class="star-wrapper star-right">
-                  <img src="/assets/ui/Grey/Double/star.png" alt="Star" class="star-img" />
+                  <img src="/assets/ui/Grey/Double/star.png" alt="" class="star-img" />
                 </div>
               </div>
 
-              <!-- Card Header -->
               <div class="card-title">
                 <h2>¡BANDEJA LLENA!</h2>
               </div>
 
-              <!-- Inner Box (Red border) -->
               <div class="inner-box red-border">
                 <span class="box-subtitle">FIN DE LA PARTIDA</span>
                 <p class="lose-desc">Te has quedado sin espacio para más fichas.</p>
                 <div class="lose-score-chip" v-if="score !== undefined">
-                  <span class="chip-label">Puntaje Obtenido</span>
+                  <span class="chip-label">Puntaje de Sesión</span>
                   <span class="chip-val">{{ formatScore(score) }} PTS</span>
                 </div>
               </div>
 
-              <!-- Action Button (Round Kenney Yellow Retry) -->
               <div class="bottom-action-buttons">
-                <button class="round-btn round-yellow play-btn" @click="$emit('retry')" title="Reintentar Nivel">
+                <button
+                  type="button"
+                  class="round-btn round-yellow play-btn"
+                  @click="$emit('retry')"
+                  title="Reintentar Nivel"
+                  aria-label="Reintentar Nivel"
+                >
                   <img src="/assets/ui/Extra/Double/icon_repeat_dark.png" alt="Reintentar" class="round-icon play-icon" />
                 </button>
               </div>
             </template>
 
+            <!-- ════════════════ PAUSE DIALOG (Kenney Purple Card) ════════════════ -->
+            <template v-else-if="variant === 'pause'">
+              <div class="window-tab pause-tab">
+                <span>⏸️ PAUSA</span>
+              </div>
+
+              <div class="card-title">
+                <h2>JUEGO EN PAUSA</h2>
+              </div>
+
+              <div class="inner-box purple-border">
+                <span class="box-subtitle">NIVEL {{ level || 1 }}</span>
+                <p class="lose-desc">Tu tablero y bandeja están guardados de forma segura.</p>
+                <div class="pause-menu-list">
+                  <button type="button" class="pause-menu-btn btn-resume" @click="$emit('resume')">
+                    ▶️ Continuar Partida
+                  </button>
+                  <button type="button" class="pause-menu-btn btn-restart" @click="$emit('retry')">
+                    🔄 Reiniciar Nivel
+                  </button>
+                  <button type="button" class="pause-menu-btn btn-tutorial" @click="$emit('open-tutorial')">
+                    📖 Cómo Jugar (Tutorial)
+                  </button>
+                  <button type="button" class="pause-menu-btn btn-map" @click="$emit('open-map')">
+                    🗺️ Mapa de Mundos
+                  </button>
+                </div>
+              </div>
+            </template>
+
             <!-- ════════════════ WELCOME DIALOG (Kenney Grey Tabbed Window) ════════════════ -->
             <template v-else-if="variant === 'welcome'">
-              <!-- Top Tab like the Kenney sample -->
               <div class="window-tab">
                 <span>PERFIL</span>
               </div>
 
-              <!-- Card Header -->
               <div class="card-title welcome-title">
                 <h2>¡BIENVENIDO! 🎮</h2>
               </div>
 
-              <!-- Inner Box -->
               <div class="inner-box grey-border">
                 <span class="box-subtitle">CREA TU APODO</span>
                 <p class="welcome-desc">Aparecerá en la Tabla de Clasificación:</p>
@@ -124,6 +166,7 @@
                     v-model="inputValue"
                     placeholder="Tu Nombre"
                     maxlength="18"
+                    aria-label="Ingresa tu apodo"
                     @keyup.enter="handleSubmit"
                     ref="inputRef"
                     class="kenney-input"
@@ -131,15 +174,13 @@
                 </div>
               </div>
 
-              <!-- Green Accept Button with Checkmark -->
               <div class="welcome-action">
-                <button class="btn-kenney-accept" @click="handleSubmit">
-                  <img src="/assets/ui/Green/Double/icon_checkmark.png" alt="Check" class="accept-icon" />
+                <button type="button" class="btn-kenney-accept" @click="handleSubmit">
+                  <img src="/assets/ui/Green/Double/icon_checkmark.png" alt="" class="accept-icon" />
                   <span>¡A JUGAR!</span>
                 </button>
               </div>
             </template>
-
           </div>
         </Transition>
       </div>
@@ -153,7 +194,7 @@ import { playTap } from '../game/sounds';
 
 const props = defineProps<{
   isOpen: boolean;
-  variant: 'welcome' | 'win' | 'lose';
+  variant: 'welcome' | 'win' | 'lose' | 'pause';
   level?: number;
   score?: number;
   bonus?: { base: number; powerups: number; total: number };
@@ -164,19 +205,25 @@ const emit = defineEmits<{
   (e: 'submit', value: string): void;
   (e: 'next'): void;
   (e: 'retry'): void;
+  (e: 'resume'): void;
+  (e: 'open-tutorial'): void;
+  (e: 'open-map'): void;
 }>();
 
 const inputValue = ref('');
 const inputRef = ref<HTMLInputElement | null>(null);
 
-watch(() => props.isOpen, (newVal) => {
-  if (newVal && props.variant === 'welcome') {
-    inputValue.value = '';
-    nextTick(() => {
-      inputRef.value?.focus();
-    });
-  }
-});
+watch(
+  () => props.isOpen,
+  newVal => {
+    if (newVal && props.variant === 'welcome') {
+      inputValue.value = '';
+      nextTick(() => {
+        inputRef.value?.focus();
+      });
+    }
+  },
+);
 
 const handleSubmit = () => {
   playTap();
@@ -187,14 +234,13 @@ const formatScore = (num: number) => {
   return new Intl.NumberFormat('es-ES').format(num);
 };
 
-// Confetti generator for celebratory victory
 const getConfettiStyle = (index: number) => {
   const colors = ['#f8be14', '#2b99ff', '#38c644', '#ea4335', '#a855f7'];
   const left = Math.random() * 100;
   const animDuration = 1.4 + Math.random() * 2;
   const animDelay = Math.random() * 0.4;
   const color = colors[index % colors.length];
-  
+
   return {
     left: `${left}%`,
     backgroundColor: color,
@@ -205,7 +251,6 @@ const getConfettiStyle = (index: number) => {
 </script>
 
 <style scoped>
-/* ─── Backdrop ────────────────────────────────────────────── */
 .dialog-backdrop {
   position: fixed;
   top: 0;
@@ -225,7 +270,6 @@ const getConfettiStyle = (index: number) => {
   overflow-y: auto;
 }
 
-/* ─── Card Base ───────────────────────────────────────────── */
 .dialog-card {
   width: 92%;
   max-width: 360px;
@@ -238,37 +282,42 @@ const getConfettiStyle = (index: number) => {
   animation: cardBounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ─── WIN Card (Kenney Blue Theme) ────────────────────────── */
 .dialog-card.variant-win {
   background: #2b99ff;
   border: 4px solid #1e6bc4;
-  box-shadow: 
+  box-shadow:
     0 10px 0 #154c8c,
     0 25px 40px rgba(0, 0, 0, 0.35);
-  margin-top: 48px; /* space for protruding stars */
+  margin-top: 48px;
 }
 
-/* ─── LOSE Card (Kenney Red Theme) ────────────────────────── */
 .dialog-card.variant-lose {
   background: #ea4335;
   border: 4px solid #aa2218;
-  box-shadow: 
+  box-shadow:
     0 10px 0 #7c150e,
     0 25px 40px rgba(0, 0, 0, 0.35);
   margin-top: 48px;
 }
 
-/* ─── WELCOME Card (Kenney Grey Theme with Tab) ───────────── */
+.dialog-card.variant-pause {
+  background: #8b5cf6;
+  border: 4px solid #6d28d9;
+  box-shadow:
+    0 10px 0 #4c1d95,
+    0 25px 40px rgba(0, 0, 0, 0.35);
+  margin-top: 20px;
+}
+
 .dialog-card.variant-welcome {
   background: #e2e8f0;
   border: 4px solid #cbd5e1;
-  box-shadow: 
+  box-shadow:
     0 10px 0 #94a3b8,
     0 25px 40px rgba(0, 0, 0, 0.25);
   margin-top: 20px;
 }
 
-/* ─── Protruding Stars (Kenney Style) ─────────────────────── */
 .stars-crown {
   position: absolute;
   top: -50px;
@@ -308,7 +357,7 @@ const getConfettiStyle = (index: number) => {
   width: 58px;
   height: 58px;
   object-fit: contain;
-  filter: drop-shadow(0 6px 4px rgba(0,0,0,0.3));
+  filter: drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3));
 }
 
 .star-big {
@@ -321,7 +370,6 @@ const getConfettiStyle = (index: number) => {
   100% { opacity: 1; }
 }
 
-/* ─── Welcome Tab on Top ──────────────────────────────────── */
 .window-tab {
   position: absolute;
   top: -32px;
@@ -335,10 +383,13 @@ const getConfettiStyle = (index: number) => {
   font-size: 11px;
   font-weight: 900;
   color: #ffffff;
-  box-shadow: 0 -2px 0 rgba(0,0,0,0.1);
 }
 
-/* ─── Card Titles ─────────────────────────────────────────── */
+.window-tab.pause-tab {
+  background: #8b5cf6;
+  border-color: #6d28d9;
+}
+
 .card-title h2 {
   margin: 10px 0 14px;
   font-family: var(--game-font, sans-serif);
@@ -355,40 +406,38 @@ const getConfettiStyle = (index: number) => {
   margin-top: 4px;
 }
 
-/* ─── Inner Boxes ─────────────────────────────────────────── */
 .inner-box {
   background: #ffffff;
   border-radius: 20px;
   padding: 16px 14px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .inner-box.gold-border {
   border: 3px solid #f8be14;
-  box-shadow: 
-    0 3px 0 #b8860b,
-    inset 0 2px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 3px 0 #b8860b, inset 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .inner-box.red-border {
   border: 3px solid #ea4335;
-  box-shadow: 
-    0 3px 0 #aa2218,
-    inset 0 2px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 3px 0 #aa2218, inset 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.inner-box.purple-border {
+  border: 3px solid #c4b5fd;
+  margin-bottom: 0;
 }
 
 .inner-box.grey-border {
   border: 3px solid #cbd5e1;
-  box-shadow: 
-    0 3px 0 #94a3b8,
-    inset 0 2px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 3px 0 #94a3b8, inset 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .box-subtitle {
   display: block;
   font-family: var(--game-font, sans-serif);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   color: #64748b;
   letter-spacing: 0.5px;
@@ -470,6 +519,57 @@ const getConfettiStyle = (index: number) => {
   font-weight: 900;
 }
 
+.pause-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pause-menu-btn {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 14px;
+  font-family: var(--game-font, sans-serif);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s ease;
+}
+
+.pause-menu-btn:active {
+  transform: translateY(2px);
+}
+
+.btn-resume {
+  background: #38c644;
+  border-color: #278d30;
+  box-shadow: 0 4px 0 #1b6822;
+  color: #fff;
+}
+
+.btn-restart {
+  background: #f59e0b;
+  border-color: #d97706;
+  box-shadow: 0 4px 0 #b45309;
+  color: #fff;
+}
+
+.btn-tutorial {
+  background: #10b981;
+  border-color: #059669;
+  box-shadow: 0 4px 0 #047857;
+  color: #fff;
+}
+
+.btn-map {
+  background: #3b82f6;
+  border-color: #1d4ed8;
+  box-shadow: 0 4px 0 #1e40af;
+  color: #fff;
+}
+
 .welcome-desc {
   font-size: 13px;
   color: #475569;
@@ -493,20 +593,19 @@ const getConfettiStyle = (index: number) => {
   outline: none;
   color: #0f172a;
   background: #f8fafc;
-  box-shadow: inset 0 2px 5px rgba(0,0,0,0.06);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.06);
   transition: all 0.2s;
   box-sizing: border-box;
 }
 
 .kenney-input:focus {
   border-color: #2b99ff;
-  box-shadow: 
-    inset 0 2px 4px rgba(0,0,0,0.04),
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.04),
     0 0 0 3px rgba(43, 153, 255, 0.25);
   background: #ffffff;
 }
 
-/* ─── Bottom Circular Buttons (Kenney Style) ──────────────── */
 .bottom-action-buttons {
   display: flex;
   justify-content: center;
@@ -532,12 +631,12 @@ const getConfettiStyle = (index: number) => {
 .round-yellow {
   background: linear-gradient(180deg, #fce052 0%, #f8be14 100%);
   border: 3px solid #b8860b;
-  box-shadow: 0 6px 0 #8c6503, 0 10px 15px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 0 #8c6503, 0 10px 15px rgba(0, 0, 0, 0.25);
 }
 
 .round-btn:active {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 #8c6503, 0 4px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 0 #8c6503, 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .play-btn {
@@ -555,10 +654,9 @@ const getConfettiStyle = (index: number) => {
 .play-icon {
   width: 38px;
   height: 38px;
-  margin-left: 3px; /* visual center for play triangle */
+  margin-left: 3px;
 }
 
-/* ─── Welcome Accept Button (Kenney Green) ─────────────────── */
 .welcome-action {
   display: flex;
   justify-content: center;
@@ -571,7 +669,7 @@ const getConfettiStyle = (index: number) => {
   gap: 10px;
   background: #38c644;
   border: 3px solid #278d30;
-  box-shadow: 0 6px 0 #1b6822, 0 8px 15px rgba(0,0,0,0.15);
+  box-shadow: 0 6px 0 #1b6822, 0 8px 15px rgba(0, 0, 0, 0.15);
   border-radius: 18px;
   padding: 14px 28px;
   color: #ffffff;
@@ -582,12 +680,12 @@ const getConfettiStyle = (index: number) => {
   cursor: pointer;
   width: 100%;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .btn-kenney-accept:active {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 #1b6822, 0 4px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 0 #1b6822, 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .accept-icon {
@@ -596,7 +694,6 @@ const getConfettiStyle = (index: number) => {
   object-fit: contain;
 }
 
-/* ─── Confetti ────────────────────────────────────────────── */
 .confetti-container {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -619,7 +716,6 @@ const getConfettiStyle = (index: number) => {
   }
 }
 
-/* ─── Dialog Transitions ──────────────────────────────────── */
 .dialog-fade-enter-active, .dialog-fade-leave-active {
   transition: opacity 0.25s ease;
 }

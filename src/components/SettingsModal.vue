@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useGameSettings } from '../composables/useGameSettings';
 import { playClick, playSwitch } from '../game/sounds';
 
-defineProps<{
+const props = defineProps<{
   isOpen: boolean;
   username: string;
   userUid?: string;
@@ -13,19 +14,26 @@ const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
   (e: 'edit-name'): void;
   (e: 'restore-progress'): void;
+  (e: 'open-tutorial'): void;
 }>();
 
 const {
   sfxEnabled,
   sfxVolume,
+  musicEnabled,
+  musicVolume,
   vibrationEnabled,
   toggleSfx,
   setSfxVolume,
+  toggleMusic,
+  setMusicVolume,
   toggleVibration,
   developerName,
   gameVersion,
   appTitle,
 } = useGameSettings();
+
+const copiedUid = ref(false);
 
 const close = () => {
   playClick();
@@ -34,13 +42,22 @@ const close = () => {
 
 const handleVolumeChange = (event: Event) => {
   const target = event.target as HTMLInputElement;
-  const val = Number(target.value);
-  setSfxVolume(val);
+  setSfxVolume(Number(target.value));
   playClick();
+};
+
+const handleMusicVolumeChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  setMusicVolume(Number(target.value));
 };
 
 const handleToggleSfx = () => {
   toggleSfx();
+  playSwitch();
+};
+
+const handleToggleMusic = () => {
+  toggleMusic();
   playSwitch();
 };
 
@@ -58,37 +75,64 @@ const handleRestoreProgress = () => {
   playClick();
   emit('restore-progress');
 };
+
+const handleOpenTutorial = () => {
+  playClick();
+  emit('open-tutorial');
+};
+
+const copyRecoveryId = async () => {
+  if (!props.userUid) return;
+  playClick();
+  try {
+    await navigator.clipboard.writeText(props.userUid);
+    copiedUid.value = true;
+    setTimeout(() => {
+      copiedUid.value = false;
+    }, 2000);
+  } catch {
+    // ignore
+  }
+};
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="dialog-fade">
-      <div v-if="isOpen" class="dialog-backdrop" @click.self="close">
+      <div
+        v-if="isOpen"
+        class="dialog-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Configuración"
+        @click.self="close"
+      >
         <Transition name="dialog-pop">
           <div v-if="isOpen" class="dialog-card settings-card">
-            <!-- Window Tab on Top -->
             <div class="window-tab">
               <span>⚙️ AJUSTES</span>
             </div>
 
-            <!-- Close Button Corner -->
-            <button class="modal-close-corner" @click="close" title="Cerrar">
+            <button
+              type="button"
+              class="modal-close-corner"
+              @click="close"
+              title="Cerrar"
+              aria-label="Cerrar ajustes"
+            >
               <img src="/assets/ui/Red/Default/icon_cross.png" alt="Cerrar" class="close-icon" />
             </button>
 
-            <!-- Modal Title -->
             <div class="settings-header">
               <h2 class="settings-title">CONFIGURACIÓN</h2>
               <p class="settings-subtitle">{{ appTitle }}</p>
             </div>
 
-            <!-- Settings Content -->
             <div class="settings-body">
-              
               <!-- ─── Audio Section ─── -->
               <div class="setting-group">
-                <div class="group-title">🔊 AUDIO Y SONIDO</div>
-                
+                <div class="group-title">🔊 AUDIO Y MÚSICA</div>
+
                 <!-- Toggle SFX -->
                 <div class="setting-row">
                   <div class="row-info">
@@ -96,8 +140,11 @@ const handleRestoreProgress = () => {
                     <span class="row-desc">Sonidos de fichas y combinaciones</span>
                   </div>
                   <button
+                    type="button"
                     class="kenney-toggle"
                     :class="{ 'is-active': sfxEnabled }"
+                    :aria-pressed="sfxEnabled"
+                    aria-label="Activar o desactivar efectos sonoros"
                     @click="handleToggleSfx"
                   >
                     <span class="toggle-track">
@@ -107,39 +154,86 @@ const handleRestoreProgress = () => {
                   </button>
                 </div>
 
-                <!-- Volume Slider -->
+                <!-- SFX Volume Slider -->
                 <div class="setting-row volume-slider-row" v-if="sfxEnabled">
                   <div class="slider-header">
-                    <span class="row-label">Volumen General</span>
+                    <span class="row-label">Volumen Efectos</span>
                     <span class="slider-val">{{ sfxVolume }}%</span>
                   </div>
                   <div class="slider-container">
-                    <span class="slider-icon">🔈</span>
+                    <span class="slider-icon" aria-hidden="true">🔈</span>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       :value="sfxVolume"
+                      aria-label="Volumen de efectos sonoros"
                       @input="handleVolumeChange"
                       class="kenney-slider"
                     />
-                    <span class="slider-icon">🔊</span>
+                    <span class="slider-icon" aria-hidden="true">🔊</span>
+                  </div>
+                </div>
+
+                <!-- Toggle Music -->
+                <div class="setting-row music-toggle-row">
+                  <div class="row-info">
+                    <span class="row-label">Música Ambiental</span>
+                    <span class="row-desc">Melodía relajante de fondo</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="kenney-toggle"
+                    :class="{ 'is-active': musicEnabled }"
+                    :aria-pressed="musicEnabled"
+                    aria-label="Activar o desactivar música ambiental"
+                    @click="handleToggleMusic"
+                  >
+                    <span class="toggle-track">
+                      <span class="toggle-thumb"></span>
+                    </span>
+                    <span class="toggle-text">{{ musicEnabled ? 'SÍ' : 'NO' }}</span>
+                  </button>
+                </div>
+
+                <!-- Music Volume Slider -->
+                <div class="setting-row volume-slider-row" v-if="musicEnabled">
+                  <div class="slider-header">
+                    <span class="row-label">Volumen Música</span>
+                    <span class="slider-val">{{ musicVolume }}%</span>
+                  </div>
+                  <div class="slider-container">
+                    <span class="slider-icon" aria-hidden="true">🎵</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      :value="musicVolume"
+                      aria-label="Volumen de música ambiental"
+                      @input="handleMusicVolumeChange"
+                      class="kenney-slider"
+                    />
+                    <span class="slider-icon" aria-hidden="true">🎶</span>
                   </div>
                 </div>
               </div>
 
-              <!-- ─── Feedback Section ─── -->
+              <!-- ─── Feedback & Help Section ─── -->
               <div class="setting-group">
-                <div class="group-title">📳 RESPUESTA HÁPTICA</div>
+                <div class="group-title">📳 HÁPTICA Y AYUDA</div>
                 <div class="setting-row">
                   <div class="row-info">
-                    <span class="row-label">Vibración</span>
-                    <span class="row-desc">Vibrar suavemente al tocar fichas</span>
+                    <span class="row-label">Vibración Nativa</span>
+                    <span class="row-desc">Respuesta táctil al tocar fichas</span>
                   </div>
                   <button
+                    type="button"
                     class="kenney-toggle"
                     :class="{ 'is-active': vibrationEnabled }"
+                    :aria-pressed="vibrationEnabled"
+                    aria-label="Activar o desactivar vibración"
                     @click="handleToggleVib"
                   >
                     <span class="toggle-track">
@@ -148,28 +242,51 @@ const handleRestoreProgress = () => {
                     <span class="toggle-text">{{ vibrationEnabled ? 'SÍ' : 'NO' }}</span>
                   </button>
                 </div>
+
+                <div class="setting-row tutorial-row">
+                  <div class="row-info">
+                    <span class="row-label">Guía de Juego</span>
+                    <span class="row-desc">Repasa las reglas en 3 pasos</span>
+                  </div>
+                  <button type="button" class="btn-edit-profile" @click="handleOpenTutorial">
+                    <span>📖 Tutorial</span>
+                  </button>
+                </div>
               </div>
 
               <!-- ─── Player Section ─── -->
               <div class="setting-group">
-                <div class="group-title">👤 PERFIL DE JUGADOR</div>
+                <div class="group-title">👤 PERFIL Y SEGURIDAD</div>
                 <div class="setting-row player-row">
                   <div class="player-info">
                     <span class="row-label">Tu Apodo</span>
                     <span class="player-current-name">{{ username || 'Jugador' }}</span>
                   </div>
-                  <button class="btn-edit-profile" @click="handleEditName">
+                  <button type="button" class="btn-edit-profile" @click="handleEditName">
                     <span>✏️ Cambiar</span>
+                  </button>
+                </div>
+
+                <!-- Private Recovery Code Box -->
+                <div class="setting-row player-row uid-row" v-if="userUid">
+                  <div class="player-info uid-info">
+                    <span class="row-label">Código de Recuperación Privado</span>
+                    <code class="uid-code">{{ userUid }}</code>
+                  </div>
+                  <button type="button" class="btn-copy-uid" @click="copyRecoveryId">
+                    <span>{{ copiedUid ? '✅ Copiado' : '📋 Copiar' }}</span>
                   </button>
                 </div>
 
                 <!-- Recovery Row -->
                 <div class="setting-row player-row recovery-row">
                   <div class="player-info">
-                    <span class="row-label">Nivel Actual: <strong class="lvl-highlight">{{ currentLevel || 1 }}</strong></span>
-                    <span class="row-desc">Restaura tu nivel anterior</span>
+                    <span class="row-label">
+                      Nivel Actual: <strong class="lvl-highlight">{{ currentLevel || 1 }}</strong>
+                    </span>
+                    <span class="row-desc">Restaurar con Código Privado</span>
                   </div>
-                  <button class="btn-restore-profile" @click="handleRestoreProgress">
+                  <button type="button" class="btn-restore-profile" @click="handleRestoreProgress">
                     <span>🔄 Recuperar</span>
                   </button>
                 </div>
@@ -186,16 +303,13 @@ const handleRestoreProgress = () => {
                   <span class="meta-dot">•</span>
                   <span class="meta-item">{{ gameVersion }}</span>
                 </div>
-                <p class="dev-tagline">"Primera versión oficial • Hecho con pasión y dedicación"</p>
+                <p class="dev-tagline">"Hecho con pasión y dedicación"</p>
               </div>
-
             </div>
 
-            <!-- Bottom Close Action -->
-            <button class="settings-ok-btn" @click="close">
+            <button type="button" class="settings-ok-btn" @click="close">
               <span>¡ENTENDIDO!</span>
             </button>
-
           </div>
         </Transition>
       </div>
@@ -204,7 +318,6 @@ const handleRestoreProgress = () => {
 </template>
 
 <style scoped>
-/* ─── Backdrop ────────────────────────────────────────────── */
 .dialog-backdrop {
   position: fixed;
   top: 0;
@@ -223,7 +336,6 @@ const handleRestoreProgress = () => {
   box-sizing: border-box;
 }
 
-/* ─── Card Base ───────────────────────────────────────────── */
 .settings-card {
   width: 94%;
   max-width: 380px;
@@ -232,7 +344,7 @@ const handleRestoreProgress = () => {
   background: #f8fafc;
   border: 4px solid #38bdf8;
   border-radius: 28px;
-  box-shadow: 
+  box-shadow:
     0 10px 0 #0284c7,
     0 25px 40px rgba(0, 0, 0, 0.35);
   position: relative;
@@ -244,7 +356,6 @@ const handleRestoreProgress = () => {
   margin-top: 15px;
 }
 
-/* Protruding Window Tab */
 .window-tab {
   position: absolute;
   top: -30px;
@@ -258,10 +369,8 @@ const handleRestoreProgress = () => {
   font-size: 11px;
   font-weight: 900;
   color: #ffffff;
-  box-shadow: 0 -2px 0 rgba(0,0,0,0.1);
 }
 
-/* Close Corner */
 .modal-close-corner {
   position: absolute;
   top: 12px;
@@ -277,12 +386,6 @@ const handleRestoreProgress = () => {
   justify-content: center;
   cursor: pointer;
   z-index: 5;
-  transition: transform 0.1s ease;
-}
-
-.modal-close-corner:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #991b1b;
 }
 
 .close-icon {
@@ -291,21 +394,18 @@ const handleRestoreProgress = () => {
   object-fit: contain;
 }
 
-/* Header */
 .settings-header {
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   flex-shrink: 0;
 }
 
 .settings-title {
   font-family: var(--game-font, sans-serif);
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   font-weight: 900;
   color: #0369a1;
   margin: 0;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
 }
 
 .settings-subtitle {
@@ -316,17 +416,15 @@ const handleRestoreProgress = () => {
   margin: 2px 0 0;
 }
 
-/* Body Scrollable Area */
 .settings-body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 4px 2px 8px;
   flex: 1 1 auto;
 }
 
-/* Setting Groups */
 .setting-group {
   background: #ffffff;
   border: 2px solid #e2e8f0;
@@ -351,6 +449,13 @@ const handleRestoreProgress = () => {
   gap: 8px;
 }
 
+.music-toggle-row,
+.tutorial-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+}
+
 .row-info {
   display: flex;
   flex-direction: column;
@@ -370,7 +475,6 @@ const handleRestoreProgress = () => {
   font-weight: 600;
 }
 
-/* Kenney Toggle Switch */
 .kenney-toggle {
   display: flex;
   align-items: center;
@@ -386,7 +490,6 @@ const handleRestoreProgress = () => {
   height: 24px;
   background: #cbd5e1;
   border: 2px solid #94a3b8;
-  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.15);
   border-radius: 14px;
   display: flex;
   align-items: center;
@@ -400,7 +503,6 @@ const handleRestoreProgress = () => {
   height: 16px;
   background: #ffffff;
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -419,16 +521,14 @@ const handleRestoreProgress = () => {
   font-weight: 900;
   color: #334155;
   min-width: 20px;
-  text-align: left;
 }
 
-/* Volume Slider */
 .volume-slider-row {
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px dashed #e2e8f0;
 }
 
@@ -468,21 +568,14 @@ const handleRestoreProgress = () => {
 .kenney-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   background: #f8be14;
   border: 2px solid #b8860b;
-  box-shadow: 0 2px 0 #8c6503;
   border-radius: 50%;
   cursor: pointer;
-  transition: transform 0.1s ease;
 }
 
-.kenney-slider::-webkit-slider-thumb:active {
-  transform: scale(1.15);
-}
-
-/* Player Row */
 .player-row {
   background: #f0f9ff;
   border: 1px solid #bae6fd;
@@ -493,6 +586,43 @@ const handleRestoreProgress = () => {
 .player-info {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.uid-row {
+  margin-top: 6px;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.uid-info {
+  flex: 1;
+}
+
+.uid-code {
+  font-size: 9px;
+  color: #475569;
+  background: #e2e8f0;
+  padding: 2px 5px;
+  border-radius: 6px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-copy-uid {
+  background: #64748b;
+  border: 1.5px solid #475569;
+  box-shadow: 0 2px 0 #334155;
+  border-radius: 10px;
+  color: #fff;
+  font-family: var(--game-font, sans-serif);
+  font-size: 9px;
+  font-weight: 900;
+  padding: 5px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .player-current-name {
@@ -515,13 +645,8 @@ const handleRestoreProgress = () => {
   cursor: pointer;
 }
 
-.btn-edit-profile:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #0369a1;
-}
-
 .recovery-row {
-  margin-top: 8px;
+  margin-top: 6px;
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
 }
@@ -541,29 +666,15 @@ const handleRestoreProgress = () => {
   font-weight: 900;
   padding: 5px 9px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 3px;
 }
 
-.btn-restore-profile:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #047857;
-}
-
-/* ─── Developer Signature Card ─── */
 .developer-card {
   background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
   border: 2.5px solid #f8be14;
   border-radius: 20px;
-  padding: 14px 12px;
+  padding: 12px;
   text-align: center;
-  box-shadow: 
-    0 4px 0 #d97706,
-    0 8px 16px rgba(245, 158, 11, 0.15);
-  position: relative;
-  outline: 2px dashed rgba(217, 119, 6, 0.35);
-  outline-offset: -5px;
+  box-shadow: 0 4px 0 #d97706;
 }
 
 .dev-badge {
@@ -571,8 +682,7 @@ const handleRestoreProgress = () => {
   font-size: 9px;
   font-weight: 900;
   color: #b45309;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .dev-signature-title {
@@ -580,17 +690,14 @@ const handleRestoreProgress = () => {
   font-size: 10px;
   font-weight: 800;
   color: #78350f;
-  letter-spacing: 1px;
 }
 
 .dev-name {
   font-family: var(--game-font, sans-serif);
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 900;
   color: #92400e;
-  margin: 4px 0 2px;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8);
+  margin: 2px 0;
 }
 
 .dev-role-chip {
@@ -603,7 +710,7 @@ const handleRestoreProgress = () => {
   border-radius: 10px;
   display: inline-block;
   padding: 2px 8px;
-  margin: 4px 0 6px;
+  margin: 2px 0 4px;
 }
 
 .dev-meta {
@@ -617,22 +724,17 @@ const handleRestoreProgress = () => {
   color: #78350f;
 }
 
-.meta-dot {
-  opacity: 0.5;
-}
-
 .dev-tagline {
   font-family: var(--game-font-narrow, sans-serif);
   font-size: 10px;
   font-style: italic;
   font-weight: 600;
   color: #a16207;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
 }
 
-/* Bottom OK Button */
 .settings-ok-btn {
-  margin-top: 10px;
+  margin-top: 8px;
   background: #38c644;
   border: 3px solid #278d30;
   box-shadow: 0 5px 0 #1b6822;
@@ -642,35 +744,6 @@ const handleRestoreProgress = () => {
   font-family: var(--game-font, sans-serif);
   font-size: 12px;
   font-weight: 900;
-  letter-spacing: 0.5px;
   cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-  flex-shrink: 0;
-}
-
-.settings-ok-btn:active {
-  transform: translateY(3px);
-  box-shadow: 0 2px 0 #1b6822;
-}
-
-/* Dialog Transitions */
-.dialog-fade-enter-active, .dialog-fade-leave-active {
-  transition: opacity 0.22s ease;
-}
-.dialog-fade-enter-from, .dialog-fade-leave-to {
-  opacity: 0;
-}
-
-.dialog-pop-enter-active {
-  animation: cardBounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.dialog-pop-leave-active {
-  animation: cardBounce 0.2s reverse ease-in;
-}
-
-@keyframes cardBounce {
-  0% { transform: scale(0.7) translateY(20px); opacity: 0; }
-  100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 </style>
-

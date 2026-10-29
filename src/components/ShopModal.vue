@@ -1,29 +1,46 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import type { SkinDefinition, BackgroundDefinition, ItemStatus } from '../game/types';
+import { ref, watch } from 'vue';
+import type {
+  SkinDefinition,
+  BackgroundDefinition,
+  PowerUpPackDefinition,
+  ItemStatus,
+} from '../game/types';
 import { playClick, playTap } from '../game/sounds';
+
+export type ShopTab = 'skins' | 'backgrounds' | 'powerups';
 
 const props = defineProps<{
   isOpen: boolean;
   coins: number;
   shopSkins: SkinDefinition[];
   shopBackgrounds: BackgroundDefinition[];
+  shopPowerUpPacks: PowerUpPackDefinition[];
   getSkinStatus: (id: string) => ItemStatus;
   getBackgroundStatus: (id: string) => ItemStatus;
   canAfford: (price: number) => boolean;
+  initialTab?: ShopTab;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
   (e: 'buy-skin', skin: SkinDefinition): void;
   (e: 'buy-background', bg: BackgroundDefinition): void;
+  (e: 'buy-powerup-pack', pack: PowerUpPackDefinition): void;
   (e: 'equip-skin', skin: SkinDefinition): void;
   (e: 'equip-background', bg: BackgroundDefinition): void;
 }>();
 
-// ─── Tab State ────────────────────────────────────────────────
-type ShopTab = 'skins' | 'backgrounds';
-const activeTab = ref<ShopTab>('skins');
+const activeTab = ref<ShopTab>(props.initialTab || 'skins');
+
+watch(
+  () => props.isOpen,
+  open => {
+    if (open && props.initialTab) {
+      activeTab.value = props.initialTab;
+    }
+  },
+);
 
 const setTab = (tab: ShopTab) => {
   playTap();
@@ -35,7 +52,6 @@ const close = () => {
   emit('update:isOpen', false);
 };
 
-// ─── Actions ──────────────────────────────────────────────────
 const handleSkinAction = (skin: SkinDefinition) => {
   const status = props.getSkinStatus(skin.id);
   if (status === 'equipped') return;
@@ -56,6 +72,12 @@ const handleBgAction = (bg: BackgroundDefinition) => {
   }
 };
 
+const handlePackAction = (pack: PowerUpPackDefinition) => {
+  if (props.canAfford(pack.price)) {
+    emit('buy-powerup-pack', pack);
+  }
+};
+
 const getButtonLabel = (status: ItemStatus, price: number, canBuy: boolean): string => {
   if (status === 'equipped') return '⭐ EQUIPADO';
   if (status === 'owned') return '✅ EQUIPAR';
@@ -63,7 +85,7 @@ const getButtonLabel = (status: ItemStatus, price: number, canBuy: boolean): str
   return '🔒 SIN FONDOS';
 };
 
-const getButtonClass = (status: ItemStatus, price: number, canBuy: boolean): string => {
+const getButtonClass = (status: ItemStatus, canBuy: boolean): string => {
   if (status === 'equipped') return 'btn-equipped';
   if (status === 'owned') return 'btn-equip';
   if (canBuy) return 'btn-buy';
@@ -76,52 +98,77 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
 <template>
   <Teleport to="body">
     <Transition name="dialog-fade">
-      <div v-if="isOpen" class="dialog-backdrop" @click.self="close">
+      <div
+        v-if="isOpen"
+        class="dialog-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tienda"
+        @click.self="close"
+      >
         <Transition name="dialog-pop">
           <div v-if="isOpen" class="dialog-card shop-card">
-
-            <!-- Window Tab -->
             <div class="window-tab">
               <span>🛒 TIENDA</span>
             </div>
 
-            <!-- Close Button -->
-            <button class="modal-close-corner" @click="close" title="Cerrar">
+            <button
+              type="button"
+              class="modal-close-corner"
+              @click="close"
+              title="Cerrar"
+              aria-label="Cerrar tienda"
+            >
               <img src="/assets/ui/Red/Default/icon_cross.png" alt="Cerrar" class="close-icon" />
             </button>
 
-            <!-- Header with Coin Balance -->
             <div class="shop-header">
-              <h2 class="shop-title">TIENDA DE COSMÉTICOS</h2>
+              <h2 class="shop-title">TIENDA DEL JUEGO</h2>
               <div class="coin-balance">
-                <span class="coin-icon-big">🪙</span>
+                <span class="coin-icon-big" aria-hidden="true">🪙</span>
                 <span class="coin-amount">{{ formatCoins(coins) }}</span>
               </div>
             </div>
 
-            <!-- Tab Selector -->
-            <div class="tab-bar">
+            <!-- 3-Tab Selector -->
+            <div class="tab-bar" role="tablist">
               <button
+                type="button"
+                role="tab"
+                :aria-selected="activeTab === 'skins'"
                 class="tab-btn"
                 :class="{ 'is-active': activeTab === 'skins' }"
                 @click="setTab('skins')"
               >
-                <span class="tab-icon">🎨</span>
+                <span class="tab-icon" aria-hidden="true">🎨</span>
                 <span class="tab-label">Fichas</span>
               </button>
               <button
+                type="button"
+                role="tab"
+                :aria-selected="activeTab === 'backgrounds'"
                 class="tab-btn"
                 :class="{ 'is-active': activeTab === 'backgrounds' }"
                 @click="setTab('backgrounds')"
               >
-                <span class="tab-icon">🖼️</span>
+                <span class="tab-icon" aria-hidden="true">🖼️</span>
                 <span class="tab-label">Fondos</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                :aria-selected="activeTab === 'powerups'"
+                class="tab-btn"
+                :class="{ 'is-active': activeTab === 'powerups' }"
+                @click="setTab('powerups')"
+              >
+                <span class="tab-icon" aria-hidden="true">⚡</span>
+                <span class="tab-label">Ayudas</span>
               </button>
             </div>
 
             <!-- Content Area -->
             <div class="shop-body">
-
               <!-- ─── SKINS TAB ─── -->
               <div v-if="activeTab === 'skins'" class="items-grid">
                 <div
@@ -130,8 +177,7 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
                   class="item-card"
                   :class="{ 'is-equipped': getSkinStatus(skin.id) === 'equipped' }"
                 >
-                  <!-- Preview Emojis -->
-                  <div class="skin-preview">
+                  <div class="skin-preview" aria-hidden="true">
                     <span
                       v-for="(emoji, idx) in skin.preview"
                       :key="idx"
@@ -139,18 +185,20 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
                     >{{ emoji }}</span>
                   </div>
 
-                  <!-- Info -->
                   <div class="item-info">
                     <span class="item-name">{{ skin.name }}</span>
                     <span v-if="skin.price === 0" class="item-price free">GRATIS</span>
                     <span v-else class="item-price">{{ skin.price }} 🪙</span>
                   </div>
 
-                  <!-- Action Button -->
                   <button
+                    type="button"
                     class="item-action-btn"
-                    :class="getButtonClass(getSkinStatus(skin.id), skin.price, canAfford(skin.price))"
-                    :disabled="getSkinStatus(skin.id) === 'equipped' || (getSkinStatus(skin.id) === 'locked' && !canAfford(skin.price))"
+                    :class="getButtonClass(getSkinStatus(skin.id), canAfford(skin.price))"
+                    :disabled="
+                      getSkinStatus(skin.id) === 'equipped' ||
+                      (getSkinStatus(skin.id) === 'locked' && !canAfford(skin.price))
+                    "
                     @click="handleSkinAction(skin)"
                   >
                     {{ getButtonLabel(getSkinStatus(skin.id), skin.price, canAfford(skin.price)) }}
@@ -166,23 +214,24 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
                   class="item-card"
                   :class="{ 'is-equipped': getBackgroundStatus(bg.id) === 'equipped' }"
                 >
-                  <!-- Gradient Preview -->
-                  <div class="bg-preview" :style="{ background: bg.gradient }">
+                  <div class="bg-preview" :style="{ background: bg.gradient }" aria-hidden="true">
                     <span class="bg-preview-emoji">{{ bg.previewEmoji }}</span>
                   </div>
 
-                  <!-- Info -->
                   <div class="item-info">
                     <span class="item-name">{{ bg.name }}</span>
                     <span v-if="bg.price === 0" class="item-price free">GRATIS</span>
                     <span v-else class="item-price">{{ bg.price }} 🪙</span>
                   </div>
 
-                  <!-- Action Button -->
                   <button
+                    type="button"
                     class="item-action-btn"
-                    :class="getButtonClass(getBackgroundStatus(bg.id), bg.price, canAfford(bg.price))"
-                    :disabled="getBackgroundStatus(bg.id) === 'equipped' || (getBackgroundStatus(bg.id) === 'locked' && !canAfford(bg.price))"
+                    :class="getButtonClass(getBackgroundStatus(bg.id), canAfford(bg.price))"
+                    :disabled="
+                      getBackgroundStatus(bg.id) === 'equipped' ||
+                      (getBackgroundStatus(bg.id) === 'locked' && !canAfford(bg.price))
+                    "
                     @click="handleBgAction(bg)"
                   >
                     {{ getButtonLabel(getBackgroundStatus(bg.id), bg.price, canAfford(bg.price)) }}
@@ -190,13 +239,39 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
                 </div>
               </div>
 
+              <!-- ─── POWER-UPS TAB ─── -->
+              <div v-if="activeTab === 'powerups'" class="items-grid">
+                <div
+                  v-for="pack in shopPowerUpPacks"
+                  :key="pack.id"
+                  class="item-card"
+                >
+                  <div class="pack-preview" aria-hidden="true">
+                    <span>{{ pack.icon }}</span>
+                  </div>
+
+                  <div class="item-info">
+                    <span class="item-name">{{ pack.name }}</span>
+                    <span class="pack-desc">{{ pack.description }}</span>
+                    <span class="item-price">{{ pack.price }} 🪙</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="item-action-btn"
+                    :class="canAfford(pack.price) ? 'btn-buy' : 'btn-locked'"
+                    :disabled="!canAfford(pack.price)"
+                    @click="handlePackAction(pack)"
+                  >
+                    {{ canAfford(pack.price) ? `💰 ${pack.price} 🪙` : '🔒 SIN FONDOS' }}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <!-- Bottom Close -->
-            <button class="shop-close-btn" @click="close">
+            <button type="button" class="shop-close-btn" @click="close">
               <span>CERRAR TIENDA</span>
             </button>
-
           </div>
         </Transition>
       </div>
@@ -205,7 +280,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
 </template>
 
 <style scoped>
-/* ─── Backdrop ────────────────────────────────────────────── */
 .dialog-backdrop {
   position: fixed;
   top: 0; left: 0;
@@ -223,7 +297,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   box-sizing: border-box;
 }
 
-/* ─── Card Base ───────────────────────────────────────────── */
 .shop-card {
   width: 94%;
   max-width: 400px;
@@ -244,7 +317,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   margin-top: 15px;
 }
 
-/* Protruding Window Tab */
 .window-tab {
   position: absolute;
   top: -30px;
@@ -258,10 +330,8 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   font-size: 11px;
   font-weight: 900;
   color: #ffffff;
-  box-shadow: 0 -2px 0 rgba(0,0,0,0.1);
 }
 
-/* Close Corner */
 .modal-close-corner {
   position: absolute;
   top: 12px; right: 12px;
@@ -275,12 +345,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   justify-content: center;
   cursor: pointer;
   z-index: 5;
-  transition: transform 0.1s ease;
-}
-
-.modal-close-corner:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #991b1b;
 }
 
 .close-icon {
@@ -288,7 +352,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   object-fit: contain;
 }
 
-/* ─── Header ──────────────────────────────────────────────── */
 .shop-header {
   text-align: center;
   margin-bottom: 8px;
@@ -301,7 +364,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   font-weight: 900;
   color: #92400e;
   margin: 0;
-  letter-spacing: 0.5px;
 }
 
 .coin-balance {
@@ -327,7 +389,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   color: #92400e;
 }
 
-/* ─── Tab Bar ─────────────────────────────────────────────── */
 .tab-bar {
   display: flex;
   gap: 6px;
@@ -344,10 +405,10 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   background: #ffffff;
   border: 2px solid #e2e8f0;
   border-radius: 14px;
-  padding: 6px 8px;
+  padding: 6px 6px;
   cursor: pointer;
   font-family: var(--game-font, sans-serif);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   color: #64748b;
   box-shadow: 0 3px 0 #cbd5e1;
@@ -361,38 +422,26 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   box-shadow: 0 3px 0 #b45309;
 }
 
-.tab-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #cbd5e1;
-}
-
-.tab-btn.is-active:active {
-  box-shadow: 0 1px 0 #b45309;
-}
-
 .tab-icon {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .tab-label {
-  font-size: 11px;
+  font-size: 10px;
 }
 
-/* ─── Body Scrollable Area ────────────────────────────────── */
 .shop-body {
   overflow-y: auto;
   flex: 1 1 auto;
   padding: 2px 0 4px;
 }
 
-/* ─── Items Grid ──────────────────────────────────────────── */
 .items-grid {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* ─── Item Card ───────────────────────────────────────────── */
 .item-card {
   background: #ffffff;
   border: 2px solid #e2e8f0;
@@ -402,7 +451,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: border-color 0.2s ease;
   flex-shrink: 0;
   min-height: 52px;
   box-sizing: border-box;
@@ -414,7 +462,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   box-shadow: 0 2px 0 #d97706, 0 0 8px rgba(245, 158, 11, 0.15);
 }
 
-/* ─── Skin Preview ────────────────────────────────────────── */
 .skin-preview {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -439,8 +486,8 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   justify-content: center;
 }
 
-/* ─── Background Preview ─────────────────────────────────── */
-.bg-preview {
+.bg-preview,
+.pack-preview {
   width: 52px;
   height: 38px;
   flex-shrink: 0;
@@ -449,15 +496,18 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.pack-preview {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-color: #f59e0b;
+  font-size: 20px;
 }
 
 .bg-preview-emoji {
   font-size: 18px;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
-/* ─── Item Info ───────────────────────────────────────────── */
 .item-info {
   display: flex;
   flex-direction: column;
@@ -476,6 +526,13 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   text-overflow: ellipsis;
 }
 
+.pack-desc {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .item-price {
   font-family: var(--game-font-narrow, sans-serif);
   font-size: 10px;
@@ -488,7 +545,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   font-weight: 900;
 }
 
-/* ─── Action Buttons ──────────────────────────────────────── */
 .item-action-btn {
   flex-shrink: 0;
   font-family: var(--game-font-narrow, sans-serif);
@@ -498,12 +554,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   border-radius: 10px;
   cursor: pointer;
   white-space: nowrap;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-  letter-spacing: 0.3px;
-}
-
-.item-action-btn:active:not(:disabled) {
-  transform: translateY(2px);
 }
 
 .btn-buy {
@@ -513,19 +563,11 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   color: #ffffff;
 }
 
-.btn-buy:active {
-  box-shadow: 0 1px 0 #b45309;
-}
-
 .btn-equip {
   background: #38c644;
   border: 1.5px solid #278d30;
   box-shadow: 0 3px 0 #1b6822;
   color: #ffffff;
-}
-
-.btn-equip:active {
-  box-shadow: 0 1px 0 #1b6822;
 }
 
 .btn-equipped {
@@ -545,7 +587,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   opacity: 0.7;
 }
 
-/* ─── Bottom Button ───────────────────────────────────────── */
 .shop-close-btn {
   margin-top: 8px;
   background: #38bdf8;
@@ -557,34 +598,6 @@ const formatCoins = (n: number) => new Intl.NumberFormat('es-ES').format(n);
   font-family: var(--game-font, sans-serif);
   font-size: 12px;
   font-weight: 900;
-  letter-spacing: 0.5px;
   cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-  flex-shrink: 0;
-}
-
-.shop-close-btn:active {
-  transform: translateY(3px);
-  box-shadow: 0 2px 0 #0369a1;
-}
-
-/* ─── Dialog Transitions ──────────────────────────────────── */
-.dialog-fade-enter-active, .dialog-fade-leave-active {
-  transition: opacity 0.22s ease;
-}
-.dialog-fade-enter-from, .dialog-fade-leave-to {
-  opacity: 0;
-}
-
-.dialog-pop-enter-active {
-  animation: cardBounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.dialog-pop-leave-active {
-  animation: cardBounce 0.2s reverse ease-in;
-}
-
-@keyframes cardBounce {
-  0% { transform: scale(0.7) translateY(20px); opacity: 0; }
-  100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 </style>

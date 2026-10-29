@@ -1,12 +1,24 @@
 /**
- * useShop — composable for the cosmetics shop.
+ * useShop — composable for the cosmetics and power-up shop.
  *
  * Provides reactive access to the shop catalog, purchase/equip actions,
- * and item status checks. Bridges shopCatalog ↔ useFirebase.
+ * power-up pack refills, and item status checks. Bridges shopCatalog ↔ useFirebase.
  */
 import { computed } from 'vue';
-import type { SkinDefinition, BackgroundDefinition, ItemStatus, ShopItemType } from '../game/types';
-import { SHOP_SKINS, SHOP_BACKGROUNDS, getSkinById, getBackgroundById } from '../game/shopCatalog';
+import type {
+  SkinDefinition,
+  BackgroundDefinition,
+  PowerUpPackDefinition,
+  ItemStatus,
+  ShopItemType,
+} from '../game/types';
+import {
+  SHOP_SKINS,
+  SHOP_BACKGROUNDS,
+  SHOP_POWERUP_PACKS,
+  getSkinById,
+  getBackgroundById,
+} from '../game/shopCatalog';
 import { setActiveSkinMap } from '../game/tileAssets';
 import { playClick, playPowerup, playMatch } from '../game/sounds';
 
@@ -18,6 +30,7 @@ interface UseFirebaseReturn {
   unlockedBackgrounds: { value: string[] };
   purchaseItem: (itemId: string, price: number, type: ShopItemType) => Promise<boolean>;
   equipItem: (itemId: string, type: ShopItemType) => Promise<boolean>;
+  spendCoins?: (price: number) => Promise<boolean>;
 }
 
 export function useShop(firebase: UseFirebaseReturn) {
@@ -29,11 +42,13 @@ export function useShop(firebase: UseFirebaseReturn) {
     unlockedBackgrounds,
     purchaseItem: fbPurchase,
     equipItem: fbEquip,
+    spendCoins: fbSpendCoins,
   } = firebase;
 
   // ─── Catalog ────────────────────────────────────────────────
   const shopSkins = SHOP_SKINS;
   const shopBackgrounds = SHOP_BACKGROUNDS;
+  const shopPowerUpPacks = SHOP_POWERUP_PACKS;
 
   // ─── Status Checks ─────────────────────────────────────────
 
@@ -79,6 +94,21 @@ export function useShop(firebase: UseFirebaseReturn) {
     return ok;
   };
 
+  const buyPowerUpPack = async (
+    pack: PowerUpPackDefinition,
+    onGrant: (rewards: { undo: number; shuffle: number; hint: number }) => void,
+  ): Promise<boolean> => {
+    if (!canAfford(pack.price) || !fbSpendCoins) return false;
+
+    playClick();
+    const ok = await fbSpendCoins(pack.price);
+    if (ok) {
+      onGrant(pack.rewards);
+      playPowerup();
+    }
+    return ok;
+  };
+
   // ─── Equip Actions ─────────────────────────────────────────
 
   const equipSkin = async (skin: SkinDefinition): Promise<boolean> => {
@@ -88,7 +118,6 @@ export function useShop(firebase: UseFirebaseReturn) {
     playMatch();
     const ok = await fbEquip(skin.id, 'skin');
     if (ok) {
-      // Apply the skin's emoji map to the tile rendering system
       applySkinToRenderer(skin.id);
     }
     return ok;
@@ -104,13 +133,9 @@ export function useShop(firebase: UseFirebaseReturn) {
 
   // ─── Skin Renderer Integration ─────────────────────────────
 
-  /**
-   * Apply a skin's emoji map to the global tile renderer.
-   * Called on equip and on app startup.
-   */
   const applySkinToRenderer = (skinId: string) => {
     if (skinId === 'default_fruits') {
-      setActiveSkinMap(null); // Reset to default emojis
+      setActiveSkinMap(null);
       return;
     }
     const skin = getSkinById(skinId);
@@ -119,10 +144,6 @@ export function useShop(firebase: UseFirebaseReturn) {
     }
   };
 
-  /**
-   * Initialize the skin renderer with the currently equipped skin.
-   * Call this once on app startup after loading user profile.
-   */
   const initializeSkin = () => {
     applySkinToRenderer(activeSkin.value);
   };
@@ -143,6 +164,7 @@ export function useShop(firebase: UseFirebaseReturn) {
     // Catalog
     shopSkins,
     shopBackgrounds,
+    shopPowerUpPacks,
 
     // Status
     getSkinStatus,
@@ -152,6 +174,7 @@ export function useShop(firebase: UseFirebaseReturn) {
     // Actions
     buySkin,
     buyBackground,
+    buyPowerUpPack,
     equipSkin,
     equipBackground,
     initializeSkin,

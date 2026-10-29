@@ -2,15 +2,23 @@
  * useGameState — central reactive game state composable.
  *
  * Implements:
- * - Reactive game board & tray
+ * - Reactive game board & tray with solvability checks
+ * - Mid-level board persistence (LocalStorage + Capacitor Preferences)
+ * - Pause/resume state that preserves active combo windows
  * - Combos with rapid-match multiplier (within 4s)
  * - Level bonus calculation (base + unused power-ups bonus)
- * - Procedural level progression (1 to 100+)
- * - Power-ups (Undo, Shuffle, Hint)
- * - Floating feedback state
+ * - Procedural level progression (1 to 1000)
+ * - Power-ups (Undo, Solvable Shuffle, Tray-aware Magic Wand) + Shop refills
  */
 import { ref, computed } from 'vue';
-import type { Tile, MoveRecord, PowerUpState, GameStatus } from '../game/types';
+import { Preferences } from '@capacitor/preferences';
+import type {
+  Tile,
+  MoveRecord,
+  PowerUpState,
+  GameStatus,
+  MidLevelSaveState,
+} from '../game/types';
 import { getLevelConfig } from '../game/levelConfig';
 import {
   createBoardFromConfig,
@@ -20,7 +28,16 @@ import {
 } from '../game/boardEngine';
 import { createInitialPowerUpState, performUndo } from '../game/powerUps';
 import { getAvailableTypes } from '../game/tileAssets';
-import { playClick, playTap, playMatch, playCombo, playWin, playLose, playPowerup } from '../game/sounds';
+import {
+  playClick,
+  playTap,
+  playMatch,
+  playCombo,
+  playWin,
+  playLose,
+  playPowerup,
+} from '../game/sounds';
+import { useDailyMissions } from './useDailyMissions';
 
 export interface ComboBanner {
   id: number;
@@ -36,9 +53,38 @@ export interface LevelBonus {
   total: number;
 }
 
+const MID_LEVEL_SAVE_KEY = 'fruta_clear_midlevel_board_v1';
+const BONUS_POWERUPS_KEY = 'fruta_clear_bonus_powerups_v1';
+
+function loadBonusPowerUps(): PowerUpState {
+  try {
+    const raw = localStorage.getItem(BONUS_POWERUPS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        undoCount: Math.max(0, Number(parsed.undoCount) || 0),
+        shuffleCount: Math.max(0, Number(parsed.shuffleCount) || 0),
+        hintCount: Math.max(0, Number(parsed.hintCount) || 0),
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return { undoCount: 0, shuffleCount: 0, hintCount: 0 };
+}
+
+function saveBonusPowerUps(state: PowerUpState) {
+  try {
+    localStorage.setItem(BONUS_POWERUPS_KEY, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
 export function useGameState() {
   const MAX_TRAY = 7;
   const COMBO_WINDOW_MS = 4000;
+  const dailyMissions = useDailyMissions();
 
   // ─── Reactive State ─────────────────────────────────────────
   const boardTiles = ref<Tile[]>([]);
@@ -46,8 +92,10 @@ export function useGameState() {
   const score = ref(0);
   const level = ref(1);
   const moveHistory = ref<MoveRecord[]>([]);
+  const bonusPowerUps = ref<PowerUpState>(loadBonusPowerUps());
   const powerUpState = ref<PowerUpState>(createInitialPowerUpState(1));
   const gameStatus = ref<GameStatus>('playing');
+  const isPaused = ref(false);
   const hintedTileIds = ref<Set<string>>(new Set());
   const wigglingTileId = ref<string | null>(null);
   const isAnimating = ref(false);
@@ -56,8 +104,14 @@ export function useGameState() {
   const totalLevelTiles = ref(0);
   const comboCount = ref(0);
   const lastMatchTimestamp = ref(0);
+  let pausedAtTimestamp = 0;
   const comboBanner = ref<ComboBanner | null>(null);
-  const lastLevelBonus = ref<LevelBonus>({ base: 0, powerups: 0, comboTotal: 0, total: 0 });
+  const lastLevelBonus = ref<LevelBonus>({
+    base: 0,
+    powerups: 0,
+    comboTotal: 0,
+    total: 0,
+  });
 
   // ─── Computed ───────────────────────────────────────────────
   const currentConfig = computed(() => getLevelConfig(level.value));
@@ -75,6 +129,115 @@ export function useGameState() {
   // Danger state: tray has 5 or 6 items (about to lose at 7)
   const isTrayCritical = computed(() => tray.value.length >= 5);
 
+  // Whether Magic Wand can currently find a valid match (considers tiles in tray!)
+  const canUseHint = computed(() => {
+    if (
+      powerUpState.value.hintCount <= 0 ||
+      gameStatus.value !== 'playing' ||
+      isPaused.value ||
+      isAnimating.value
+    ) {
+      return false;
+    }
+    return findHintMatch(boardTiles.value, tray.value, MAX_TRAY) !== null;
+  });
+
+  // ─── Mid-Level Persistence (LocalStorage + Preferences) ────
+  const persistMidLevelState = () => {
+    if (gameStatus.value !== 'playing' || boardTiles.value.length === 0) {
+      clearMidLevelState();
+      return;
+    }
+    const snapshot: MidLevelSaveState = {
+      level: level.value,
+      sessionScore: score.value,
+      boardTiles: boardTiles.value,
+      tray: tray.value,
+      moveHistory: moveHistory.value,
+      powerUpState: powerUpState.value,
+      totalLevelTiles: totalLevelTiles.value,
+      savedAt: Date.now(),
+    };
+    try {
+      const serialized = JSON.stringify(snapshot);
+      localStorage.setItem(MID_LEVEL_SAVE_KEY, serialized);
+      Preferences.set({ key: MID_LEVEL_SAVE_KEY, value: serialized }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  };
+
+  const clearMidLevelState = () => {
+    try {
+      localStorage.removeItem(MID_LEVEL_SAVE_KEY);
+      Preferences.remove({ key: MID_LEVEL_SAVE_KEY }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  };
+
+  const restoreMidLevelState = async (targetLevel: number): Promise<boolean> => {
+    try {
+      let raw = localStorage.getItem(MID_LEVEL_SAVE_KEY);
+      if (!raw) {
+        try {
+          const pref = await Preferences.get({ key: MID_LEVEL_SAVE_KEY });
+          raw = pref.value;
+        } catch {
+          raw = null;
+        }
+      }
+      if (!raw) return false;
+
+      const parsed = JSON.parse(raw) as MidLevelSaveState;
+      if (
+        !parsed ||
+        parsed.level !== targetLevel ||
+        !Array.isArray(parsed.boardTiles) ||
+        parsed.boardTiles.length === 0 ||
+        !Array.isArray(parsed.tray) ||
+        parsed.tray.length >= MAX_TRAY
+      ) {
+        return false;
+      }
+
+      level.value = parsed.level;
+      score.value = parsed.sessionScore || 0;
+      boardTiles.value = computeBlockedStatus(parsed.boardTiles);
+      tray.value = parsed.tray;
+      moveHistory.value = Array.isArray(parsed.moveHistory) ? parsed.moveHistory : [];
+      powerUpState.value = parsed.powerUpState || createInitialPowerUpState(targetLevel);
+      totalLevelTiles.value =
+        parsed.totalLevelTiles || parsed.boardTiles.length + parsed.tray.length;
+      gameStatus.value = 'playing';
+      isPaused.value = false;
+      hintedTileIds.value = new Set();
+      wigglingTileId.value = null;
+      isAnimating.value = false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // ─── Pause / Resume ─────────────────────────────────────────
+  const pauseGame = () => {
+    if (isPaused.value) return;
+    isPaused.value = true;
+    pausedAtTimestamp = Date.now();
+    persistMidLevelState();
+  };
+
+  const resumeGame = () => {
+    if (!isPaused.value) return;
+    if (pausedAtTimestamp > 0 && lastMatchTimestamp.value > 0) {
+      const pausedDuration = Date.now() - pausedAtTimestamp;
+      lastMatchTimestamp.value += pausedDuration;
+    }
+    pausedAtTimestamp = 0;
+    isPaused.value = false;
+  };
+
   // ─── Board Generation ──────────────────────────────────────
   const generateBoard = () => {
     const config = currentConfig.value;
@@ -85,16 +248,48 @@ export function useGameState() {
     moveHistory.value = [];
     hintedTileIds.value = new Set();
     wigglingTileId.value = null;
-    powerUpState.value = createInitialPowerUpState(level.value);
+
+    const baseAllowances = createInitialPowerUpState(level.value);
+    powerUpState.value = {
+      undoCount: baseAllowances.undoCount + bonusPowerUps.value.undoCount,
+      shuffleCount: baseAllowances.shuffleCount + bonusPowerUps.value.shuffleCount,
+      hintCount: baseAllowances.hintCount + bonusPowerUps.value.hintCount,
+    };
+
     gameStatus.value = 'playing';
+    isPaused.value = false;
     isAnimating.value = false;
     comboCount.value = 0;
     lastMatchTimestamp.value = 0;
     comboBanner.value = null;
+    persistMidLevelState();
+  };
+
+  // ─── Grant Purchased Power-Ups ─────────────────────────────
+  const grantBonusPowerUps = (rewards: {
+    undo: number;
+    shuffle: number;
+    hint: number;
+  }) => {
+    bonusPowerUps.value = {
+      undoCount: bonusPowerUps.value.undoCount + rewards.undo,
+      shuffleCount: bonusPowerUps.value.shuffleCount + rewards.shuffle,
+      hintCount: bonusPowerUps.value.hintCount + rewards.hint,
+    };
+    saveBonusPowerUps(bonusPowerUps.value);
+
+    powerUpState.value = {
+      undoCount: powerUpState.value.undoCount + rewards.undo,
+      shuffleCount: powerUpState.value.shuffleCount + rewards.shuffle,
+      hintCount: powerUpState.value.hintCount + rewards.hint,
+    };
+    persistMidLevelState();
   };
 
   // ─── Tile Selection ────────────────────────────────────────
   const selectTile = (tile: Tile) => {
+    if (isPaused.value) return;
+
     if (tile.isBlocked) {
       playTap();
       wigglingTileId.value = tile.id;
@@ -135,6 +330,7 @@ export function useGameState() {
     tray.value.push(tile);
     tray.value.sort((a, b) => a.type.localeCompare(b.type));
 
+    persistMidLevelState();
     checkMatches();
   };
 
@@ -174,6 +370,9 @@ export function useGameState() {
           m => !removedSet.has(m.tile.id),
         );
 
+        // Record daily mission tiles cleared
+        dailyMissions.recordTilesCleared(removed);
+
         // ─── Combo System ─────────────────────────────
         const now = Date.now();
         if (now - lastMatchTimestamp.value <= COMBO_WINDOW_MS) {
@@ -185,6 +384,7 @@ export function useGameState() {
 
         if (comboCount.value > 1) {
           playCombo(comboCount.value);
+          dailyMissions.recordCombo();
         } else {
           playMatch();
         }
@@ -205,7 +405,6 @@ export function useGameState() {
 
         score.value += pointsEarned;
 
-        // Show floating combo banner
         comboBanner.value = {
           id: now,
           text: bannerText,
@@ -213,14 +412,12 @@ export function useGameState() {
           multiplier: comboCount.value,
         };
 
-        // Auto-dismiss banner
         setTimeout(() => {
           if (comboBanner.value?.id === now) {
             comboBanner.value = null;
           }
         }, 1800);
 
-        // Check for chain matches (e.g., 6 of same type in tray)
         const nextCounts: Record<string, number> = {};
         tray.value.forEach(t => {
           nextCounts[t.type] = (nextCounts[t.type] || 0) + 1;
@@ -230,6 +427,7 @@ export function useGameState() {
         } else {
           checkWinCondition();
           checkLoseCondition();
+          persistMidLevelState();
         }
       }, 250);
     } else {
@@ -240,7 +438,6 @@ export function useGameState() {
   // ─── Win / Lose ────────────────────────────────────────────
   const checkWinCondition = () => {
     if (boardTiles.value.length === 0 && tray.value.length === 0) {
-      // Calculate level bonus
       const base = 500 + level.value * 50;
       const unusedPowerups =
         powerUpState.value.undoCount +
@@ -258,19 +455,20 @@ export function useGameState() {
       };
 
       gameStatus.value = 'won';
+      clearMidLevelState();
+      dailyMissions.recordLevelWin();
       playWin();
     }
   };
 
   const checkLoseCondition = () => {
-    // 1. Tray reaches maximum capacity (7 tiles)
     if (tray.value.length >= MAX_TRAY) {
       gameStatus.value = 'lost';
+      clearMidLevelState();
       playLose();
       return;
     }
 
-    // 2. Deadlock protection: board is cleared but tray still holds leftovers that cannot match
     if (boardTiles.value.length === 0 && tray.value.length > 0) {
       const counts: Record<string, number> = {};
       tray.value.forEach(t => {
@@ -279,6 +477,7 @@ export function useGameState() {
       const hasMatch = Object.values(counts).some(c => c >= 3);
       if (!hasMatch) {
         gameStatus.value = 'lost';
+        clearMidLevelState();
         playLose();
       }
     }
@@ -288,6 +487,7 @@ export function useGameState() {
 
   const undoMove = () => {
     if (
+      isPaused.value ||
       powerUpState.value.undoCount <= 0 ||
       moveHistory.value.length === 0 ||
       gameStatus.value !== 'playing' ||
@@ -307,14 +507,20 @@ export function useGameState() {
     boardTiles.value = result.boardTiles;
     tray.value = result.tray;
     moveHistory.value = result.moveHistory;
+    if (bonusPowerUps.value.undoCount > 0) {
+      bonusPowerUps.value.undoCount--;
+      saveBonusPowerUps(bonusPowerUps.value);
+    }
     powerUpState.value = {
       ...powerUpState.value,
       undoCount: powerUpState.value.undoCount - 1,
     };
+    persistMidLevelState();
   };
 
   const shuffleBoard = () => {
     if (
+      isPaused.value ||
       powerUpState.value.shuffleCount <= 0 ||
       boardTiles.value.length === 0 ||
       gameStatus.value !== 'playing' ||
@@ -323,61 +529,74 @@ export function useGameState() {
       return;
 
     playPowerup();
-    boardTiles.value = shuffleTilePositions(boardTiles.value);
+    boardTiles.value = shuffleTilePositions(
+      boardTiles.value,
+      tray.value,
+      MAX_TRAY,
+    );
+    if (bonusPowerUps.value.shuffleCount > 0) {
+      bonusPowerUps.value.shuffleCount--;
+      saveBonusPowerUps(bonusPowerUps.value);
+    }
     powerUpState.value = {
       ...powerUpState.value,
       shuffleCount: powerUpState.value.shuffleCount - 1,
     };
+    persistMidLevelState();
   };
 
   const autoMatch = () => {
     if (
+      isPaused.value ||
       powerUpState.value.hintCount <= 0 ||
       gameStatus.value !== 'playing' ||
-      isAnimating.value ||
-      tray.value.length > MAX_TRAY - 3
+      isAnimating.value
     )
       return;
 
-    const hintTiles = findHintMatch(boardTiles.value);
-    if (!hintTiles) return;
+    const hintTiles = findHintMatch(boardTiles.value, tray.value, MAX_TRAY);
+    if (!hintTiles || hintTiles.length === 0) return;
 
     playPowerup();
 
-    // Visual highlight phase
     hintedTileIds.value = new Set(hintTiles.map(t => t.id));
     isAnimating.value = true;
 
     setTimeout(() => {
       const ids = hintedTileIds.value;
 
-      // Remove from board
       boardTiles.value = computeBlockedStatus(
         boardTiles.value.filter(t => !ids.has(t.id)),
       );
 
-      // Add to tray
       tray.value.push(...hintTiles);
       tray.value.sort((a, b) => a.type.localeCompare(b.type));
 
       hintedTileIds.value = new Set();
       isAnimating.value = false;
+      if (bonusPowerUps.value.hintCount > 0) {
+        bonusPowerUps.value.hintCount--;
+        saveBonusPowerUps(bonusPowerUps.value);
+      }
       powerUpState.value = {
         ...powerUpState.value,
         hintCount: powerUpState.value.hintCount - 1,
       };
 
+      persistMidLevelState();
       checkMatches();
     }, 500);
   };
 
   // ─── Level Navigation ──────────────────────────────────────
   const nextLevel = () => {
+    clearMidLevelState();
     level.value++;
     generateBoard();
   };
 
   const retryLevel = () => {
+    clearMidLevelState();
     generateBoard();
   };
 
@@ -391,10 +610,12 @@ export function useGameState() {
     moveHistory,
     powerUpState,
     gameStatus,
+    isPaused,
     hintedTileIds,
     wigglingTileId,
     isAnimating,
     MAX_TRAY,
+    canUseHint,
 
     // Progress & Stats
     totalLevelTiles,
@@ -419,5 +640,11 @@ export function useGameState() {
     autoMatch,
     nextLevel,
     retryLevel,
+    pauseGame,
+    resumeGame,
+    grantBonusPowerUps,
+    persistMidLevelState,
+    restoreMidLevelState,
+    clearMidLevelState,
   };
 }
