@@ -222,3 +222,18 @@ export const playPowerup = () => {
   playTone(1600, 'sine', 0.2, 0.05, 0.1);
   playTone(1000, 'sine', 0.3, 0.05, 0.15);
 };
+
+export const playTrayWarning = () => {
+  initAudio();
+  triggerHaptic(35, 'warning');
+  playTone(220, 'triangle', 0.14, 0.06, 0);
+  playTone(196, 'triangle', 0.18, 0.06, 0.09);
+};
+
+export const playLevelIntro = () => {
+  initAudio();
+  triggerHaptic(20, 'light');
+  playTone(523.25, 'sine', 0.12, 0.05, 0);    // C5
+  playTone(659.25, 'sine', 0.12, 0.05, 0.08); // E5
+  playTone(783.99, 'sine', 0.22, 0.06, 0.16); // G5
+};

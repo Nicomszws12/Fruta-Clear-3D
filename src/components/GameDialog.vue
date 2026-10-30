@@ -15,17 +15,33 @@
 
         <Transition name="dialog-pop">
           <div v-if="isOpen" class="dialog-card" :class="`variant-${variant}`">
-            <!-- ════════════════ WIN DIALOG (Kenney Blue Reward Card) ════════════════ -->
+            <!-- ════════════════ WIN DIALOG (Kenney Blue Reward Card + 3 Stars #4) ════════════════ -->
             <template v-if="variant === 'win'">
-              <div class="stars-crown" aria-hidden="true">
-                <div class="star-wrapper star-left">
-                  <img src="/assets/ui/Yellow/Double/star.png" alt="" class="star-img" />
+              <div
+                class="stars-crown"
+                role="img"
+                :aria-label="`${earnedStarsCount} de 3 estrellas obtenidas`"
+              >
+                <div class="star-wrapper star-left" :class="{ 'is-earned': earnedStarsCount >= 1 }">
+                  <img
+                    :src="earnedStarsCount >= 1 ? '/assets/ui/Yellow/Double/star.png' : '/assets/ui/Grey/Double/star.png'"
+                    alt=""
+                    class="star-img"
+                  />
                 </div>
-                <div class="star-wrapper star-center">
-                  <img src="/assets/ui/Yellow/Double/star.png" alt="" class="star-img star-big" />
+                <div class="star-wrapper star-center" :class="{ 'is-earned': earnedStarsCount >= 2 }">
+                  <img
+                    :src="earnedStarsCount >= 2 ? '/assets/ui/Yellow/Double/star.png' : '/assets/ui/Grey/Double/star.png'"
+                    alt=""
+                    class="star-img star-big"
+                  />
                 </div>
-                <div class="star-wrapper star-right">
-                  <img src="/assets/ui/Yellow/Double/star.png" alt="" class="star-img" />
+                <div class="star-wrapper star-right" :class="{ 'is-earned': earnedStarsCount >= 3 }">
+                  <img
+                    :src="earnedStarsCount >= 3 ? '/assets/ui/Yellow/Double/star.png' : '/assets/ui/Grey/Double/star.png'"
+                    alt=""
+                    class="star-img"
+                  />
                 </div>
               </div>
 
@@ -38,6 +54,37 @@
                   {{ (coinsEarned ?? 10) > 0 ? 'TU RECOMPENSA' : 'NIVEL REJUGADO (SIN MONEDAS EXTRA)' }}
                 </span>
                 <div class="reward-pts">+{{ formatScore(bonus?.total || 0) }} PTS</div>
+
+                <!-- #4 3-Star Objectives Breakdown -->
+                <div class="stars-criteria-row">
+                  <div
+                    class="criteria-pill"
+                    :class="{ 'is-met': starsBreakdown?.noCriticalTray ?? true }"
+                  >
+                    <span class="criteria-star">
+                      {{ (starsBreakdown?.noCriticalTray ?? true) ? '⭐' : '☆' }}
+                    </span>
+                    <span class="criteria-label">Bandeja segura</span>
+                  </div>
+                  <div
+                    class="criteria-pill"
+                    :class="{ 'is-met': starsBreakdown?.noPowerUpsUsed ?? true }"
+                  >
+                    <span class="criteria-star">
+                      {{ (starsBreakdown?.noPowerUpsUsed ?? true) ? '⭐' : '☆' }}
+                    </span>
+                    <span class="criteria-label">Sin ayudas</span>
+                  </div>
+                  <div
+                    class="criteria-pill"
+                    :class="{ 'is-met': starsBreakdown?.reachedCombo2 ?? true }"
+                  >
+                    <span class="criteria-star">
+                      {{ (starsBreakdown?.reachedCombo2 ?? true) ? '⭐' : '☆' }}
+                    </span>
+                    <span class="criteria-label">Combo x2+</span>
+                  </div>
+                </div>
 
                 <div class="bonus-details">
                   <div class="bonus-tag">
@@ -117,10 +164,10 @@
               </div>
             </template>
 
-            <!-- ════════════════ PAUSE DIALOG (Kenney Purple Card) ════════════════ -->
+            <!-- ════════════════ PAUSE & MENU HUB DIALOG (#1 Kenney Purple Hub) ════════════════ -->
             <template v-else-if="variant === 'pause'">
               <div class="window-tab pause-tab">
-                <span>⏸️ PAUSA</span>
+                <span>⏸️ PAUSA Y MENÚ</span>
               </div>
 
               <div class="card-title">
@@ -128,20 +175,86 @@
               </div>
 
               <div class="inner-box purple-border">
-                <span class="box-subtitle">NIVEL {{ level || 1 }}</span>
+                <span class="box-subtitle">
+                  NIVEL {{ level || 1 }} · {{ formatScore(score || 0) }} PTS
+                </span>
                 <p class="lose-desc">Tu tablero y bandeja están guardados de forma segura.</p>
-                <div class="pause-menu-list">
-                  <button type="button" class="pause-menu-btn btn-resume" @click="$emit('resume')">
-                    ▶️ Continuar Partida
+
+                <button type="button" class="pause-menu-btn btn-resume" @click="$emit('resume')">
+                  ▶️ CONTINUAR PARTIDA
+                </button>
+
+                <!-- 2x2 Navigation Grid (>= 48px touch targets) -->
+                <div class="pause-hub-grid">
+                  <button
+                    type="button"
+                    class="pause-hub-btn hub-missions"
+                    aria-label="Misiones diarias"
+                    @click="$emit('open-missions')"
+                  >
+                    <span class="hub-icon" aria-hidden="true">🎯</span>
+                    <span class="hub-label">Misiones</span>
+                    <span v-if="(unclaimedMissionsCount || 0) > 0" class="hub-badge">
+                      {{ unclaimedMissionsCount }}
+                    </span>
                   </button>
-                  <button type="button" class="pause-menu-btn btn-restart" @click="$emit('retry')">
-                    🔄 Reiniciar Nivel
+
+                  <button
+                    type="button"
+                    class="pause-hub-btn hub-map"
+                    aria-label="Abrir mapa de mundos"
+                    @click="$emit('open-map')"
+                  >
+                    <span class="hub-icon" aria-hidden="true">🗺️</span>
+                    <span class="hub-label">Mapa</span>
                   </button>
-                  <button type="button" class="pause-menu-btn btn-tutorial" @click="$emit('open-tutorial')">
-                    📖 Cómo Jugar (Tutorial)
+
+                  <button
+                    type="button"
+                    class="pause-hub-btn hub-shop"
+                    aria-label="Abrir tienda"
+                    @click="$emit('open-shop')"
+                  >
+                    <span class="hub-icon" aria-hidden="true">🛒</span>
+                    <span class="hub-label">Tienda</span>
                   </button>
-                  <button type="button" class="pause-menu-btn btn-map" @click="$emit('open-map')">
-                    🗺️ Mapa de Mundos
+
+                  <button
+                    type="button"
+                    class="pause-hub-btn hub-leaderboard"
+                    aria-label="Tabla de clasificación"
+                    @click="$emit('open-leaderboard')"
+                  >
+                    <span class="hub-icon" aria-hidden="true">🏆</span>
+                    <span class="hub-label">Ranking</span>
+                  </button>
+                </div>
+
+                <!-- Secondary Actions Row (>= 44px touch targets) -->
+                <div class="pause-secondary-row">
+                  <button
+                    type="button"
+                    class="pause-sub-btn sub-restart"
+                    aria-label="Reiniciar nivel"
+                    @click="$emit('retry')"
+                  >
+                    🔄 Reiniciar
+                  </button>
+                  <button
+                    type="button"
+                    class="pause-sub-btn sub-settings"
+                    aria-label="Abrir ajustes"
+                    @click="$emit('open-settings')"
+                  >
+                    ⚙️ Ajustes
+                  </button>
+                  <button
+                    type="button"
+                    class="pause-sub-btn sub-tutorial"
+                    aria-label="Abrir tutorial"
+                    @click="$emit('open-tutorial')"
+                  >
+                    📖 Reglas
                   </button>
                 </div>
               </div>
@@ -189,8 +302,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { playTap } from '../game/sounds';
+import type { LevelStarsBreakdown } from '../composables/useGameState';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -199,6 +313,8 @@ const props = defineProps<{
   score?: number;
   bonus?: { base: number; powerups: number; total: number };
   coinsEarned?: number;
+  starsBreakdown?: LevelStarsBreakdown;
+  unclaimedMissionsCount?: number;
 }>();
 
 const emit = defineEmits<{
@@ -208,10 +324,19 @@ const emit = defineEmits<{
   (e: 'resume'): void;
   (e: 'open-tutorial'): void;
   (e: 'open-map'): void;
+  (e: 'open-missions'): void;
+  (e: 'open-shop'): void;
+  (e: 'open-leaderboard'): void;
+  (e: 'open-settings'): void;
 }>();
 
 const inputValue = ref('');
 const inputRef = ref<HTMLInputElement | null>(null);
+
+const earnedStarsCount = computed(() => {
+  if (!props.starsBreakdown) return 3;
+  return props.starsBreakdown.stars;
+});
 
 watch(
   () => props.isOpen,
@@ -277,7 +402,7 @@ const getConfettiStyle = (index: number) => {
   border-radius: 28px;
   position: relative;
   text-align: center;
-  padding: 24px 20px 24px;
+  padding: 24px 18px 22px;
   box-sizing: border-box;
   animation: cardBounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -337,6 +462,10 @@ const getConfettiStyle = (index: number) => {
   animation: starDrop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
+.star-wrapper.is-earned .star-img {
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.7)) drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3));
+}
+
 .star-left {
   transform: rotate(-14deg) translateY(6px);
   animation-delay: 0.1s;
@@ -391,7 +520,7 @@ const getConfettiStyle = (index: number) => {
 }
 
 .card-title h2 {
-  margin: 10px 0 14px;
+  margin: 10px 0 12px;
   font-family: var(--game-font, sans-serif);
   font-size: 1.4rem;
   letter-spacing: 0.5px;
@@ -409,8 +538,8 @@ const getConfettiStyle = (index: number) => {
 .inner-box {
   background: #ffffff;
   border-radius: 20px;
-  padding: 16px 14px;
-  margin-bottom: 16px;
+  padding: 14px 12px;
+  margin-bottom: 14px;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
@@ -441,16 +570,55 @@ const getConfettiStyle = (index: number) => {
   font-weight: 800;
   color: #64748b;
   letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .reward-pts {
   font-family: var(--game-font, sans-serif);
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 900;
   color: #0f172a;
   letter-spacing: 0.5px;
-  margin: 4px 0 10px;
+  margin: 2px 0 8px;
+}
+
+/* #4 3-Star Criteria Pills */
+.stars-criteria-row {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.criteria-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 4px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1.5px solid #cbd5e1;
+  color: #94a3b8;
+}
+
+.criteria-pill.is-met {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.criteria-star {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.criteria-label {
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 9px;
+  font-weight: 900;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 .bonus-details {
@@ -458,8 +626,7 @@ const getConfettiStyle = (index: number) => {
   justify-content: center;
   gap: 12px;
   border-top: 2px dashed #e2e8f0;
-  padding-top: 10px;
-  margin-top: 6px;
+  padding-top: 8px;
 }
 
 .bonus-tag {
@@ -490,7 +657,7 @@ const getConfettiStyle = (index: number) => {
 }
 
 .lose-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
   font-weight: 600;
   margin: 4px 0 10px;
@@ -519,19 +686,14 @@ const getConfettiStyle = (index: number) => {
   font-weight: 900;
 }
 
-.pause-menu-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
-}
-
+/* #1 Pause Hub Menu (>= 44px touch targets) */
 .pause-menu-btn {
   width: 100%;
-  padding: 11px 14px;
-  border-radius: 14px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 16px;
   font-family: var(--game-font, sans-serif);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   cursor: pointer;
   border: 2px solid transparent;
@@ -547,27 +709,107 @@ const getConfettiStyle = (index: number) => {
   border-color: #278d30;
   box-shadow: 0 4px 0 #1b6822;
   color: #fff;
+  margin-bottom: 10px;
 }
 
-.btn-restart {
-  background: #f59e0b;
-  border-color: #d97706;
-  box-shadow: 0 4px 0 #b45309;
-  color: #fff;
+.pause-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.btn-tutorial {
-  background: #10b981;
-  border-color: #059669;
-  box-shadow: 0 4px 0 #047857;
-  color: #fff;
+.pause-hub-btn {
+  position: relative;
+  min-height: 50px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--game-font, sans-serif);
+  font-size: 11px;
+  font-weight: 900;
+  color: #ffffff;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s ease;
+  padding: 8px 10px;
 }
 
-.btn-map {
+.pause-hub-btn:active {
+  transform: translateY(2px);
+}
+
+.hub-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hub-missions {
+  background: #ec4899;
+  border-color: #db2777;
+  box-shadow: 0 3px 0 #9d174d;
+}
+
+.hub-map {
   background: #3b82f6;
   border-color: #1d4ed8;
-  box-shadow: 0 4px 0 #1e40af;
-  color: #fff;
+  box-shadow: 0 3px 0 #1e40af;
+}
+
+.hub-shop {
+  background: #f59e0b;
+  border-color: #d97706;
+  box-shadow: 0 3px 0 #b45309;
+}
+
+.hub-leaderboard {
+  background: #10b981;
+  border-color: #059669;
+  box-shadow: 0 3px 0 #047857;
+}
+
+.hub-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+}
+
+.pause-secondary-row {
+  display: flex;
+  gap: 6px;
+}
+
+.pause-sub-btn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  box-shadow: 0 2px 0 #cbd5e1;
+  padding: 6px 4px;
+  transition: transform 0.1s ease;
+}
+
+.pause-sub-btn:active {
+  transform: translateY(1px);
 }
 
 .welcome-desc {

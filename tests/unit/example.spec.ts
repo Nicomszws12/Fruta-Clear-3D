@@ -288,4 +288,39 @@ describe('Deadlock de Bandeja y Estado de Juego (useGameState)', () => {
     expect(newSession.score.value).toBe(300);
     expect(newSession.tray.value.length).toBe(1);
   });
+
+  test('muestra intro de nivel 1.5s con mundo e icono y permite cerrarla (#3)', () => {
+    const game = useGameState();
+    game.level.value = 12;
+    game.generateBoard(true);
+
+    expect(game.levelIntroBanner.value).not.toBeNull();
+    expect(game.levelIntroBanner.value?.level).toBe(12);
+    expect(game.levelIntroBanner.value?.worldName).toContain('Valle Dulce');
+
+    game.dismissLevelIntro();
+    expect(game.levelIntroBanner.value).toBeNull();
+  });
+
+  test('marca las 3 fichas en matchingTileIds para el Match Pop antes de filtrarlas (#5)', () => {
+    const game = useGameState();
+    game.boardTiles.value = [
+      { id: 'm1', type: 'strawberry', gridX: 0, gridY: 0, z: 0, row: 0, col: 0, layerIndex: 0, isBlocked: false },
+      { id: 'm2', type: 'strawberry', gridX: 1, gridY: 0, z: 0, row: 0, col: 1, layerIndex: 0, isBlocked: false },
+      { id: 'm3', type: 'strawberry', gridX: 2, gridY: 0, z: 0, row: 0, col: 2, layerIndex: 0, isBlocked: false },
+      { id: 'm4', type: 'lemon', gridX: 3, gridY: 0, z: 0, row: 0, col: 3, layerIndex: 0, isBlocked: false },
+    ];
+    game.tray.value = [];
+    game.gameStatus.value = 'playing';
+
+    game.selectTile(game.boardTiles.value[0]);
+    game.selectTile(game.boardTiles.value[0]);
+    game.selectTile(game.boardTiles.value[0]);
+
+    // Durante los 260ms del Match Pop, las 3 fichas están en la bandeja y marcadas en matchingTileIds
+    expect(game.tray.value.length).toBe(3);
+    expect(game.matchingTileIds.value.has('m1')).toBe(true);
+    expect(game.matchingTileIds.value.has('m2')).toBe(true);
+    expect(game.matchingTileIds.value.has('m3')).toBe(true);
+  });
 });

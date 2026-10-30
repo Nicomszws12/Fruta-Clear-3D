@@ -3,12 +3,12 @@
  *
  * Implements:
  * - Reactive game board & tray with solvability checks
+ * - Match Pop (scale 1.22 + glow on matched triplets before removal)
+ * - Critical Tray heartbeat + haptic warning + full-tray fail state
+ * - 3-Star rating per level (no critical tray / no power-ups spent / combo x2+)
+ * - 1.5s Level & World Intro banner
  * - Mid-level board persistence (LocalStorage + Capacitor Preferences)
  * - Pause/resume state that preserves active combo windows
- * - Combos with rapid-match multiplier (within 4s)
- * - Level bonus calculation (base + unused power-ups bonus)
- * - Procedural level progression (1 to 1000)
- * - Power-ups (Undo, Solvable Shuffle, Tray-aware Magic Wand) + Shop refills
  */
 import { ref, computed } from 'vue';
 import { Preferences } from '@capacitor/preferences';
@@ -19,7 +19,7 @@ import type {
   GameStatus,
   MidLevelSaveState,
 } from '../game/types';
-import { getLevelConfig } from '../game/levelConfig';
+import { getLevelConfig, getWorldForLevel } from '../game/levelConfig';
 import {
   createBoardFromConfig,
   computeBlockedStatus,
@@ -36,6 +36,8 @@ import {
   playWin,
   playLose,
   playPowerup,
+  playTrayWarning,
+  playLevelIntro,
 } from '../game/sounds';
 import { useDailyMissions } from './useDailyMissions';
 
@@ -53,8 +55,25 @@ export interface LevelBonus {
   total: number;
 }
 
+export interface LevelStarsBreakdown {
+  stars: number;
+  noCriticalTray: boolean;
+  noPowerUpsUsed: boolean;
+  reachedCombo2: boolean;
+}
+
+export interface LevelIntroInfo {
+  id: number;
+  level: number;
+  worldId: number;
+  worldName: string;
+  worldIcon: string;
+  archetypeName: string;
+}
+
 const MID_LEVEL_SAVE_KEY = 'fruta_clear_midlevel_board_v1';
 const BONUS_POWERUPS_KEY = 'fruta_clear_bonus_powerups_v1';
+const LEVEL_STARS_KEY = 'fruta_clear_level_stars_v1';
 
 function loadBonusPowerUps(): PowerUpState {
   try {
@@ -81,6 +100,28 @@ function saveBonusPowerUps(state: PowerUpState) {
   }
 }
 
+function loadLevelStarsMap(): Record<number, number> {
+  try {
+    const raw = localStorage.getItem(LEVEL_STARS_KEY);
+    if (raw) {
+      return JSON.parse(raw) || {};
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveLevelStarsMap(map: Record<number, number>) {
+  try {
+    const str = JSON.stringify(map);
+    localStorage.setItem(LEVEL_STARS_KEY, str);
+    Preferences.set({ key: LEVEL_STARS_KEY, value: str }).catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
 export function useGameState() {
   const MAX_TRAY = 7;
   const COMBO_WINDOW_MS = 4000;
@@ -97,8 +138,24 @@ export function useGameState() {
   const gameStatus = ref<GameStatus>('playing');
   const isPaused = ref(false);
   const hintedTileIds = ref<Set<string>>(new Set());
+  const matchingTileIds = ref<Set<string>>(new Set());
   const wigglingTileId = ref<string | null>(null);
   const isAnimating = ref(false);
+  const isTrayFullError = ref(false);
+
+  // ─── 3-Star Tracking & Level Intro (#3 & #4) ────────────────
+  const hadCriticalTray = ref(false);
+  const powerUpsUsedInLevel = ref(0);
+  const maxComboInLevel = ref(1);
+  const levelStarsMap = ref<Record<number, number>>(loadLevelStarsMap());
+  const lastLevelStars = ref<LevelStarsBreakdown>({
+    stars: 3,
+    noCriticalTray: true,
+    noPowerUpsUsed: true,
+    reachedCombo2: true,
+  });
+  const levelIntroBanner = ref<LevelIntroInfo | null>(null);
+  let levelIntroTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Stats & Progress
   const totalLevelTiles = ref(0);
@@ -115,6 +172,7 @@ export function useGameState() {
 
   // ─── Computed ───────────────────────────────────────────────
   const currentConfig = computed(() => getLevelConfig(level.value));
+  const currentWorldInfo = computed(() => getWorldForLevel(level.value));
   const gridCols = computed(() => currentConfig.value.gridCols);
   const gridRows = computed(() => currentConfig.value.gridRows);
   const levelName = computed(() => currentConfig.value.name);
@@ -129,7 +187,6 @@ export function useGameState() {
   // Danger state: tray has 5 or 6 items (about to lose at 7)
   const isTrayCritical = computed(() => tray.value.length >= 5);
 
-  // Whether Magic Wand can currently find a valid match (considers tiles in tray!)
   const canUseHint = computed(() => {
     if (
       powerUpState.value.hintCount <= 0 ||
@@ -141,6 +198,39 @@ export function useGameState() {
     }
     return findHintMatch(boardTiles.value, tray.value, MAX_TRAY) !== null;
   });
+
+  // ─── Level Intro 1.5s Overlay (#3) ──────────────────────────
+  const triggerLevelIntro = () => {
+    if (levelIntroTimer) {
+      clearTimeout(levelIntroTimer);
+      levelIntroTimer = null;
+    }
+    const world = currentWorldInfo.value;
+    const cleanArch = currentConfig.value.name.replace(/\s*\(Nivel\s+\d+\)$/i, '');
+    const introId = Date.now();
+    levelIntroBanner.value = {
+      id: introId,
+      level: level.value,
+      worldId: world.id,
+      worldName: world.name,
+      worldIcon: world.icon,
+      archetypeName: cleanArch,
+    };
+    playLevelIntro();
+    levelIntroTimer = setTimeout(() => {
+      if (levelIntroBanner.value?.id === introId) {
+        levelIntroBanner.value = null;
+      }
+    }, 1500);
+  };
+
+  const dismissLevelIntro = () => {
+    if (levelIntroTimer) {
+      clearTimeout(levelIntroTimer);
+      levelIntroTimer = null;
+    }
+    levelIntroBanner.value = null;
+  };
 
   // ─── Mid-Level Persistence (LocalStorage + Preferences) ────
   const persistMidLevelState = () => {
@@ -212,8 +302,13 @@ export function useGameState() {
       gameStatus.value = 'playing';
       isPaused.value = false;
       hintedTileIds.value = new Set();
+      matchingTileIds.value = new Set();
       wigglingTileId.value = null;
       isAnimating.value = false;
+      isTrayFullError.value = false;
+      hadCriticalTray.value = parsed.tray.length >= 5;
+      powerUpsUsedInLevel.value = 0;
+      maxComboInLevel.value = 1;
       return true;
     } catch {
       return false;
@@ -239,7 +334,7 @@ export function useGameState() {
   };
 
   // ─── Board Generation ──────────────────────────────────────
-  const generateBoard = () => {
+  const generateBoard = (showIntro = true) => {
     const config = currentConfig.value;
     const types = getAvailableTypes(config.tileTypeCount, level.value);
     boardTiles.value = createBoardFromConfig(config, types);
@@ -247,7 +342,14 @@ export function useGameState() {
     tray.value = [];
     moveHistory.value = [];
     hintedTileIds.value = new Set();
+    matchingTileIds.value = new Set();
     wigglingTileId.value = null;
+    isTrayFullError.value = false;
+
+    // Reset 3-star trackers for this level attempt
+    hadCriticalTray.value = false;
+    powerUpsUsedInLevel.value = 0;
+    maxComboInLevel.value = 1;
 
     const baseAllowances = createInitialPowerUpState(level.value);
     powerUpState.value = {
@@ -263,6 +365,10 @@ export function useGameState() {
     lastMatchTimestamp.value = 0;
     comboBanner.value = null;
     persistMidLevelState();
+
+    if (showIntro) {
+      triggerLevelIntro();
+    }
   };
 
   // ─── Grant Purchased Power-Ups ─────────────────────────────
@@ -289,6 +395,9 @@ export function useGameState() {
   // ─── Tile Selection ────────────────────────────────────────
   const selectTile = (tile: Tile) => {
     if (isPaused.value) return;
+    if (levelIntroBanner.value) {
+      dismissLevelIntro();
+    }
 
     if (tile.isBlocked) {
       playTap();
@@ -334,7 +443,7 @@ export function useGameState() {
     checkMatches();
   };
 
-  // ─── Match Detection & Combos ──────────────────────────────
+  // ─── Match Detection, Match Pop (#5) & Combos ──────────────
   const checkMatches = () => {
     const counts: Record<string, number> = {};
     tray.value.forEach(t => {
@@ -351,8 +460,18 @@ export function useGameState() {
 
     if (typeToRemove) {
       const removingType = typeToRemove;
+
+      // #5 Match Pop: Immediately mark the 3 matching tiles in the tray so they scale(1.22) + glow!
+      const popIds: string[] = [];
+      for (const t of tray.value) {
+        if (t.type === removingType && popIds.length < 3) {
+          popIds.push(t.id);
+        }
+      }
+      matchingTileIds.value = new Set([...matchingTileIds.value, ...popIds]);
+
       setTimeout(() => {
-        // Remove exactly 3 of the matched type
+        // Remove the 3 matched tiles
         let removed = 0;
         const removedIds: string[] = [];
         tray.value = tray.value.filter(t => {
@@ -363,6 +482,12 @@ export function useGameState() {
           }
           return true;
         });
+
+        const nextMatching = new Set(matchingTileIds.value);
+        for (const id of removedIds) {
+          nextMatching.delete(id);
+        }
+        matchingTileIds.value = nextMatching;
 
         // Clean matched tiles from undo history
         const removedSet = new Set(removedIds);
@@ -381,6 +506,10 @@ export function useGameState() {
           comboCount.value = 1;
         }
         lastMatchTimestamp.value = now;
+
+        if (comboCount.value > maxComboInLevel.value) {
+          maxComboInLevel.value = comboCount.value;
+        }
 
         if (comboCount.value > 1) {
           playCombo(comboCount.value);
@@ -429,13 +558,21 @@ export function useGameState() {
           checkLoseCondition();
           persistMidLevelState();
         }
-      }, 250);
+      }, 260);
     } else {
+      // No triplet formed on this move: check critical tray warning (#5)
+      if (tray.value.length >= 5 && tray.value.length < MAX_TRAY) {
+        hadCriticalTray.value = true;
+        playTrayWarning();
+      } else if (tray.value.length >= MAX_TRAY) {
+        hadCriticalTray.value = true;
+        isTrayFullError.value = true;
+      }
       checkLoseCondition();
     }
   };
 
-  // ─── Win / Lose ────────────────────────────────────────────
+  // ─── Win / Lose & 3-Star Calculation (#4) ──────────────────
   const checkWinCondition = () => {
     if (boardTiles.value.length === 0 && tray.value.length === 0) {
       const base = 500 + level.value * 50;
@@ -454,6 +591,34 @@ export function useGameState() {
         total,
       };
 
+      // #4 Calculate 3 Stars:
+      // 1. Bandeja nunca crítica (!hadCriticalTray)
+      // 2. Power-ups sin gastar (powerUpsUsedInLevel === 0)
+      // 3. Combo x2+ alcanzado (maxComboInLevel >= 2)
+      const noCriticalTray = !hadCriticalTray.value;
+      const noPowerUpsUsed = powerUpsUsedInLevel.value === 0;
+      const reachedCombo2 = maxComboInLevel.value >= 2;
+      const earnedStars =
+        (noCriticalTray ? 1 : 0) +
+        (noPowerUpsUsed ? 1 : 0) +
+        (reachedCombo2 ? 1 : 0);
+
+      lastLevelStars.value = {
+        stars: earnedStars,
+        noCriticalTray,
+        noPowerUpsUsed,
+        reachedCombo2,
+      };
+
+      const prevBest = levelStarsMap.value[level.value] || 0;
+      if (earnedStars > prevBest) {
+        levelStarsMap.value = {
+          ...levelStarsMap.value,
+          [level.value]: earnedStars,
+        };
+        saveLevelStarsMap(levelStarsMap.value);
+      }
+
       gameStatus.value = 'won';
       clearMidLevelState();
       dailyMissions.recordLevelWin();
@@ -463,6 +628,7 @@ export function useGameState() {
 
   const checkLoseCondition = () => {
     if (tray.value.length >= MAX_TRAY) {
+      isTrayFullError.value = true;
       gameStatus.value = 'lost';
       clearMidLevelState();
       playLose();
@@ -476,6 +642,7 @@ export function useGameState() {
       });
       const hasMatch = Object.values(counts).some(c => c >= 3);
       if (!hasMatch) {
+        isTrayFullError.value = true;
         gameStatus.value = 'lost';
         clearMidLevelState();
         playLose();
@@ -503,6 +670,7 @@ export function useGameState() {
     if (!result) return;
 
     playPowerup();
+    powerUpsUsedInLevel.value++;
 
     boardTiles.value = result.boardTiles;
     tray.value = result.tray;
@@ -529,6 +697,7 @@ export function useGameState() {
       return;
 
     playPowerup();
+    powerUpsUsedInLevel.value++;
     boardTiles.value = shuffleTilePositions(
       boardTiles.value,
       tray.value,
@@ -558,6 +727,7 @@ export function useGameState() {
     if (!hintTiles || hintTiles.length === 0) return;
 
     playPowerup();
+    powerUpsUsedInLevel.value++;
 
     hintedTileIds.value = new Set(hintTiles.map(t => t.id));
     isAnimating.value = true;
@@ -592,12 +762,12 @@ export function useGameState() {
   const nextLevel = () => {
     clearMidLevelState();
     level.value++;
-    generateBoard();
+    generateBoard(true);
   };
 
   const retryLevel = () => {
     clearMidLevelState();
-    generateBoard();
+    generateBoard(true);
   };
 
   // ─── Public API ────────────────────────────────────────────
@@ -612,10 +782,18 @@ export function useGameState() {
     gameStatus,
     isPaused,
     hintedTileIds,
+    matchingTileIds,
     wigglingTileId,
     isAnimating,
+    isTrayFullError,
     MAX_TRAY,
     canUseHint,
+
+    // 3-Star & Intro State
+    lastLevelStars,
+    levelStarsMap,
+    levelIntroBanner,
+    dismissLevelIntro,
 
     // Progress & Stats
     totalLevelTiles,

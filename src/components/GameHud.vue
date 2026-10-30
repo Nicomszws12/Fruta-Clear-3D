@@ -32,10 +32,10 @@ const formatScore = (num: number) => {
   <ion-header class="ion-no-border">
     <ion-toolbar class="game-hud-toolbar">
       <div class="hud-container">
-        <!-- Left: User Profile Chip -->
+        <!-- 1. Avatar & Profile Button (>= 44px touch target) -->
         <button
           type="button"
-          class="hud-profile"
+          class="hud-touch-pill hud-profile"
           @click="emit('open-leaderboard')"
           title="Ver perfil y clasificación"
           :aria-label="`Perfil de ${username}, ver clasificación`"
@@ -46,122 +46,54 @@ const formatScore = (num: number) => {
           <span class="hud-username">{{ username }}</span>
         </button>
 
-        <!-- Center: Currency & Score Chips -->
-        <div class="hud-center-chips">
-          <button
-            type="button"
-            class="hud-coin-chip"
-            @click="emit('open-shop')"
-            title="Monedas — Abrir Tienda"
-            :aria-label="`${userCoins} monedas, abrir tienda`"
-          >
-            <span class="coin-icon" aria-hidden="true">🪙</span>
-            <span class="coin-val">{{ formatScore(userCoins) }}</span>
-          </button>
-
-          <div
-            class="hud-score-chip"
-            :title="`Puntos de sesión: ${formatScore(score)} · Récord: ${formatScore(highScore)}`"
-            :aria-label="`Puntaje actual ${score}`"
-          >
-            <span class="score-coin" aria-hidden="true">⭐</span>
-            <span class="score-val">{{ formatScore(score) }}</span>
-          </div>
-        </div>
-
-        <!-- Right: Action Buttons -->
-        <div class="hud-actions">
-          <button
-            type="button"
-            class="hud-btn hud-missions-btn"
-            @click="emit('open-missions')"
-            title="Misiones Diarias"
-            aria-label="Abrir Misiones Diarias"
-          >
-            <span class="btn-icon" aria-hidden="true">🎯</span>
-            <span v-if="unclaimedMissionsCount > 0" class="hud-notif-dot">
-              {{ unclaimedMissionsCount }}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class="hud-btn hud-map-btn"
-            @click="emit('open-map')"
-            title="Mapa de Mundos"
-            aria-label="Abrir Mapa de Mundos"
-          >
-            <span class="btn-icon" aria-hidden="true">🗺️</span>
-          </button>
-
-          <button
-            type="button"
-            class="hud-btn hud-shop-btn"
-            @click="emit('open-shop')"
-            title="Tienda"
-            aria-label="Abrir Tienda"
-          >
-            <span class="btn-icon" aria-hidden="true">🛒</span>
-          </button>
-
-          <button
-            type="button"
-            class="hud-btn hud-leaderboard-btn"
-            @click="emit('open-leaderboard')"
-            title="Tabla de Clasificación"
-            aria-label="Abrir Tabla de Clasificación"
-          >
-            <span class="btn-icon" aria-hidden="true">🏆</span>
-          </button>
-
-          <button
-            type="button"
-            class="hud-btn hud-pause-btn"
-            @click="emit('open-pause')"
-            title="Pausar Juego"
-            aria-label="Pausar Juego"
-          >
-            <span class="btn-icon" aria-hidden="true">⏸️</span>
-          </button>
-
-          <button
-            type="button"
-            class="hud-btn hud-settings-btn"
-            @click="emit('open-settings')"
-            title="Ajustes de Juego"
-            aria-label="Abrir Ajustes de Juego"
-          >
-            <span class="btn-icon" aria-hidden="true">⚙️</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- World & Level Subbar -->
-      <div class="subbar-host">
+        <!-- 2. Coins Button (>= 44px touch target, opens Shop) -->
         <button
           type="button"
-          class="world-subbar"
-          @click="emit('open-map')"
-          title="Ver Mapa de Mundos y Niveles"
-          :aria-label="`Nivel ${level}, ${worldName}. Progreso ${clearedTiles} de ${totalLevelTiles} fichas. Toca para abrir mapa.`"
+          class="hud-touch-pill hud-coin-chip"
+          @click="emit('open-shop')"
+          title="Monedas — Abrir Tienda"
+          aria-label="Abrir tienda"
         >
-          <div class="subbar-left">
-            <span class="subbar-level-badge">⭐ Nv. {{ level }}</span>
-            <span class="subbar-world-name">{{ worldName }}</span>
-            <span class="subbar-map-icon" aria-hidden="true">🗺️</span>
-          </div>
+          <span class="coin-icon" aria-hidden="true">🪙</span>
+          <span class="coin-val">{{ formatScore(userCoins) }}</span>
+        </button>
 
-          <div class="subbar-right">
-            <div class="subbar-progress-track" aria-hidden="true">
-              <div
-                class="subbar-progress-fill"
-                :style="{ width: `${levelProgress * 100}%` }"
-              ></div>
-            </div>
-            <span class="subbar-tiles-counter">
-              {{ clearedTiles }}/{{ totalLevelTiles }} fichas
-            </span>
+        <!-- 3. Level & Progress Pill (>= 44px touch target, opens World Map) -->
+        <button
+          type="button"
+          class="hud-touch-pill hud-level-pill"
+          @click="emit('open-map')"
+          :title="`${worldName} · Puntos: ${formatScore(score)}`"
+          :aria-label="`Nivel ${level}, ${worldName}. Progreso ${clearedTiles} de ${totalLevelTiles} fichas. Abrir mapa de mundos`"
+        >
+          <div class="level-top-row">
+            <span class="level-badge">⭐ Nv. {{ level }}</span>
+            <span class="progress-count">{{ clearedTiles }}/{{ totalLevelTiles }}</span>
           </div>
+          <div class="level-progress-track" aria-hidden="true">
+            <div
+              class="level-progress-fill"
+              :style="{ width: `${Math.round(levelProgress * 100)}%` }"
+            ></div>
+          </div>
+        </button>
+
+        <!-- 4. Pause & Menu Hub Button (44x44px touch target + mission badge) -->
+        <button
+          type="button"
+          class="hud-pause-btn"
+          @click="emit('open-pause')"
+          title="Pausa y Menú"
+          aria-label="Pausar partida"
+        >
+          <span class="pause-icon" aria-hidden="true">⏸️</span>
+          <span
+            v-if="unclaimedMissionsCount > 0"
+            class="hud-notif-dot"
+            :title="`${unclaimedMissionsCount} misión(es) lista(s) para reclamar`"
+          >
+            {{ unclaimedMissionsCount }}
+          </span>
         </button>
       </div>
     </ion-toolbar>
@@ -170,10 +102,10 @@ const formatScore = (num: number) => {
 
 <style scoped>
 .game-hud-toolbar {
-  --background: rgba(255, 255, 255, 0.98);
+  --background: rgba(255, 255, 255, 0.96);
   --color: #0f172a;
-  border-bottom: 2.5px solid #0284c7;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  border-bottom: 3px solid #0284c7;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.14);
   padding-top: env(safe-area-inset-top, 0px);
 }
 
@@ -181,314 +113,206 @@ const formatScore = (num: number) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 3px 6px;
-  gap: 4px;
+  padding: 6px 10px;
+  gap: 8px;
   width: 100%;
-  max-width: 100vw;
+  max-width: 480px;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
-.hud-profile {
+/* Minimum 44px touch height across all HUD interactive controls (#1) */
+.hud-touch-pill {
+  min-height: 44px;
+  min-width: 44px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: #f0f9ff;
-  border: 1.5px solid #bae6fd;
-  box-shadow: 0 2px 0 #7dd3fc;
-  border-radius: 14px;
-  padding: 2px 6px 2px 3px;
+  border-radius: 16px;
   cursor: pointer;
-  flex-shrink: 0;
-  max-width: 80px;
-  transition: transform 0.1s;
+  box-sizing: border-box;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  padding: 4px 10px;
 }
 
-.hud-profile:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 #7dd3fc;
+.hud-touch-pill:active {
+  transform: translateY(2px);
+}
+
+/* 1. Avatar & Username */
+.hud-profile {
+  gap: 7px;
+  background: #f0f9ff;
+  border: 2px solid #bae6fd;
+  box-shadow: 0 3px 0 #7dd3fc;
+  padding: 4px 10px 4px 6px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .hud-avatar {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: 800;
-  color: #fff;
+  font-family: var(--game-font, sans-serif);
+  font-size: 13px;
+  font-weight: 900;
+  color: #ffffff;
   flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.35);
 }
 
 .hud-username {
   font-family: var(--game-font-narrow, sans-serif);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 48px;
+  max-width: 68px;
 }
 
-.hud-center-chips {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 1;
-  min-width: 0;
-}
-
+/* 2. Coins Pill */
 .hud-coin-chip {
-  display: flex;
-  align-items: center;
-  gap: 3px;
+  gap: 5px;
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-  border: 1.5px solid #f59e0b;
-  padding: 2px 5px;
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 2px 0 #d97706;
-  transition: transform 0.1s;
+  border: 2px solid #f59e0b;
+  box-shadow: 0 3px 0 #d97706;
   flex-shrink: 0;
 }
 
-.hud-coin-chip:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 #d97706;
-}
-
 .coin-icon {
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1;
 }
 
 .coin-val {
-  font-family: var(--game-font-narrow, sans-serif);
-  font-size: 10px;
+  font-family: var(--game-font, sans-serif);
+  font-size: 12px;
   font-weight: 900;
   color: #92400e;
   white-space: nowrap;
 }
 
-.hud-score-chip {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1.5px solid rgba(245, 158, 11, 0.35);
-  padding: 2px 5px;
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-
-.score-coin {
-  font-size: 10px;
-  line-height: 1;
-}
-
-.score-val {
-  font-family: var(--game-font-narrow, sans-serif);
-  font-size: 10px;
-  font-weight: 900;
-  color: #d97706;
-  white-space: nowrap;
-}
-
-.hud-actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.hud-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
+/* 3. Level & Progress Pill */
+.hud-level-pill {
+  flex: 1;
+  flex-direction: column;
   justify-content: center;
-  width: 25px;
-  height: 25px;
-  border-radius: 8px;
-  padding: 0;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  align-items: stretch;
+  gap: 4px;
+  background: #ffffff;
+  border: 2px solid #bae6fd;
+  box-shadow: 0 3px 0 #38bdf8;
+  padding: 5px 10px;
+  min-width: 96px;
+  max-width: 155px;
 }
 
-.hud-btn:active {
-  transform: translateY(1px);
-}
-
-.btn-icon {
-  font-size: 12px;
-  line-height: 1;
-}
-
-.hud-notif-dot {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #ef4444;
-  color: #fff;
-  font-size: 8px;
-  font-weight: 900;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #fff;
-}
-
-.hud-missions-btn {
-  background: #ec4899;
-  border: 1.5px solid #db2777;
-  box-shadow: 0 2px 0 #9d174d;
-}
-
-.hud-map-btn {
-  background: #3b82f6;
-  border: 1.5px solid #1d4ed8;
-  box-shadow: 0 2px 0 #1e40af;
-}
-
-.hud-shop-btn {
-  background: #f59e0b;
-  border: 1.5px solid #d97706;
-  box-shadow: 0 2px 0 #b45309;
-}
-
-.hud-leaderboard-btn {
-  background: #38c644;
-  border: 1.5px solid #278d30;
-  box-shadow: 0 2px 0 #1b6822;
-}
-
-.hud-pause-btn {
-  background: #8b5cf6;
-  border: 1.5px solid #6d28d9;
-  box-shadow: 0 2px 0 #4c1d95;
-}
-
-.hud-settings-btn {
-  background: #0ea5e9;
-  border: 1.5px solid #0284c7;
-  box-shadow: 0 2px 0 #0369a1;
-}
-
-.subbar-host {
-  padding: 2px 6px 4px;
-  background: rgba(240, 249, 255, 0.85);
-  border-top: 1px solid rgba(2, 132, 199, 0.12);
-}
-
-.world-subbar {
+.level-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  padding: 3px 10px;
-  background: #ffffff;
-  border: 1.5px solid #bae6fd;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: transform 0.1s ease;
+  gap: 6px;
 }
 
-.world-subbar:active {
-  transform: scale(0.98);
+.level-badge {
+  font-family: var(--game-font, sans-serif);
+  font-size: 11px;
+  font-weight: 900;
+  color: #0369a1;
+  white-space: nowrap;
 }
 
-.subbar-left {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  flex-shrink: 1;
-}
-
-.subbar-level-badge {
-  background: linear-gradient(135deg, #f59e0b, #fbbf24);
-  padding: 2px 6px;
-  border-radius: 8px;
+.progress-count {
   font-family: var(--game-font-narrow, sans-serif);
   font-size: 10px;
-  font-weight: 900;
-  color: #ffffff;
-  box-shadow: 0 1.5px 0 #b45309;
-  white-space: nowrap;
-  flex-shrink: 0;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.subbar-world-name {
-  font-family: var(--game-font-narrow, sans-serif);
-  font-size: 11px;
-  font-weight: 900;
-  color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.subbar-map-icon {
-  font-size: 11px;
-  opacity: 0.85;
-  flex-shrink: 0;
-}
-
-.subbar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.subbar-progress-track {
-  width: 50px;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.subbar-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #10b981, #34d399);
-  border-radius: 4px;
-  transition: width 0.2s ease;
-}
-
-.subbar-tiles-counter {
-  font-family: var(--game-font-narrow, sans-serif);
-  font-size: 9px;
   font-weight: 800;
   color: #475569;
   white-space: nowrap;
 }
 
+.level-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.level-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+/* 4. Pause & Menu Hub Button (44x44px minimum touch area) */
+.hud-pause-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #a855f7 0%, #7c3aed 100%);
+  border: 2px solid #5b21b6;
+  box-shadow: 0 3px 0 #4c1d95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.hud-pause-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #4c1d95;
+}
+
+.pause-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.hud-notif-dot {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ef4444;
+  color: #ffffff;
+  font-family: var(--game-font, sans-serif);
+  font-size: 10px;
+  font-weight: 900;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
 @media (max-width: 360px) {
   .hud-container {
-    padding: 3px 4px;
-    gap: 2px;
+    padding: 5px 6px;
+    gap: 5px;
   }
   .hud-username {
-    max-width: 40px;
-    font-size: 9px;
+    max-width: 46px;
+    font-size: 11px;
   }
-  .hud-btn {
-    width: 23px;
-    height: 23px;
+  .hud-level-pill {
+    min-width: 82px;
+    padding: 4px 8px;
   }
 }
 </style>
-

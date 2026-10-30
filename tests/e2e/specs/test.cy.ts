@@ -1,4 +1,4 @@
-describe('Fruta Clear 3D — Flujo Completo de Partida E2E (P1-4)', () => {
+describe('Fruta Clear 3D — Flujo Completo de Partida E2E (P1-4 + Mejoras UX #1-#5)', () => {
   beforeEach(() => {
     cy.window().then(win => {
       win.localStorage.setItem(
@@ -19,17 +19,17 @@ describe('Fruta Clear 3D — Flujo Completo de Partida E2E (P1-4)', () => {
     });
   });
 
-  it('Completa el flujo de partida: selección de fichas al tray, deshacer, varita mágica y modales', () => {
+  it('Completa el flujo de partida: intro 1.5s, HUD limpio, selección al tray, deshacer, varita y Hub de Pausa', () => {
     cy.visit('/');
 
-    // 1. Verifica HUD, tablero 3D, barra de power-ups y bandeja de 7 casillas
+    // 1. Verifica HUD limpio (4 controles táctiles >=44px), tablero 3D, power-ups y bandeja de 7 casillas
     cy.get('.game-hud-toolbar').should('be.visible');
     cy.get('.board-arena').should('be.visible');
     cy.get('.powerups-bar').should('be.visible');
     cy.get('.tray-container .tray-slot').should('have.length', 7);
 
-    // 2. Selecciona una ficha libre del tablero y verifica que entra a la bandeja
-    cy.get('.board-arena .tile:not(.is-blocked)').first().click();
+    // 2. Selecciona una ficha libre del tablero (cierra la intro de nivel si sigue visible) y verifica la bandeja
+    cy.get('.board-arena .tile:not(.is-blocked)').first().click({ force: true });
     cy.get('.tray-container .tray-slot.is-filled').should('have.length', 1);
 
     // 3. Usa el Power-Up Deshacer (Undo) y comprueba que la bandeja vuelve a vaciarse
@@ -38,21 +38,20 @@ describe('Fruta Clear 3D — Flujo Completo de Partida E2E (P1-4)', () => {
 
     // 4. Usa el Power-Up Varita Mágica (Auto-Match) para despejar un trío automáticamente
     cy.get('button[aria-label*="Varita mágica"]').click();
-    cy.wait(600);
+    cy.wait(850);
     cy.get('.progress-count').should('not.contain', '0/');
 
-    // 5. Abre y cierra los modales de Misiones Diarias, Tienda (pestaña Ayudas) y Pausa
+    // 5. Abre el Hub de Pausa (#1) y navega a Misiones Diarias
+    cy.get('button[aria-label="Pausar partida"]').click();
+    cy.contains('JUEGO EN PAUSA').should('be.visible');
     cy.get('button[aria-label="Misiones diarias"]').click();
     cy.get('[aria-label="Misiones Diarias"]').should('be.visible');
     cy.get('button[aria-label="Cerrar misiones diarias"]').click();
 
-    cy.get('button[aria-label="Abrir tienda"]').click();
+    // 6. Abre la Tienda desde el chip de monedas del HUD y revisa la pestaña Ayudas
+    cy.get('button[aria-label="Abrir tienda"]').first().click();
     cy.contains('button', 'Ayudas').click();
     cy.contains('Recarga Deshacer').should('be.visible');
     cy.get('button[aria-label="Cerrar tienda"]').click();
-
-    cy.get('button[aria-label="Pausar partida"]').click();
-    cy.contains('JUEGO EN PAUSA').should('be.visible');
-    cy.contains('button', 'CONTINUAR PARTIDA').click();
   });
 });

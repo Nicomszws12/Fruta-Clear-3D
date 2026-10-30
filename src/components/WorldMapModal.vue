@@ -7,7 +7,19 @@ const props = defineProps<{
   isOpen: boolean;
   currentLevel: number;
   maxUnlockedLevel: number;
+  levelStarsMap?: Record<number, number>;
 }>();
+
+const totalEarnedStars = computed(() => {
+  if (!props.levelStarsMap) return 0;
+  return Object.values(props.levelStarsMap).reduce((sum, s) => sum + (Number(s) || 0), 0);
+});
+
+const getStarsLabelForLevel = (lvl: number): string => {
+  const earned = props.levelStarsMap?.[lvl] ?? 1;
+  const clamped = Math.min(3, Math.max(1, earned));
+  return '★'.repeat(clamped) + '☆'.repeat(3 - clamped);
+};
 
 const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
@@ -123,7 +135,9 @@ const jumpToCurrentWorld = () => {
               <div class="current-progress-banner" @click="jumpToCurrentWorld" title="Toca para ir a tu nivel actual">
                 <span class="banner-icon">{{ currentWorld.icon }}</span>
                 <div class="banner-info">
-                  <span class="banner-label">NIVEL ACTUAL: <strong>{{ currentLevel }}</strong></span>
+                  <span class="banner-label">
+                    NIVEL ACTUAL: <strong>{{ currentLevel }}</strong> · ⭐ {{ totalEarnedStars }}
+                  </span>
                   <span class="banner-sub">Mundo {{ currentWorld.id }}: {{ currentWorld.name }}</span>
                 </div>
                 <span class="banner-jump-btn">📍 IR</span>
@@ -200,7 +214,9 @@ const jumpToCurrentWorld = () => {
                     >
                       <span class="lvl-num">{{ world.minLevel + lvl - 1 }}</span>
                       <span v-if="(world.minLevel + lvl - 1) === currentLevel" class="lvl-indicator">▶</span>
-                      <span v-else-if="(world.minLevel + lvl - 1) < maxUnlockedLevel" class="lvl-indicator">★</span>
+                      <span v-else-if="(world.minLevel + lvl - 1) < maxUnlockedLevel" class="lvl-indicator">
+                        {{ getStarsLabelForLevel(world.minLevel + lvl - 1) }}
+                      </span>
                       <span v-else class="lvl-indicator">🔒</span>
                     </button>
                   </div>

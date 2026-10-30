@@ -8,6 +8,7 @@ import type {
   PowerUpPackDefinition,
   ItemStatus,
 } from '../game/types';
+import type { LevelStarsBreakdown } from '../composables/useGameState';
 import LeaderboardModal from './LeaderboardModal.vue';
 import GameDialog from './GameDialog.vue';
 import SettingsModal from './SettingsModal.vue';
@@ -31,7 +32,10 @@ const props = defineProps<{
   level: number;
   score: number;
   lastLevelBonus: { base: number; powerups: number; comboTotal?: number; total: number };
+  lastLevelStars: LevelStarsBreakdown;
+  levelStarsMap: Record<number, number>;
   lastCoinsEarned: number;
+  unclaimedMissionsCount: number;
   username: string;
   userUid: string;
   activeRecoveryCode: string;
@@ -73,6 +77,10 @@ const emit = defineEmits<{
   (e: 'resume-pause'): void;
   (e: 'open-tutorial'): void;
   (e: 'open-map-from-pause'): void;
+  (e: 'open-missions-from-pause'): void;
+  (e: 'open-shop-from-pause'): void;
+  (e: 'open-leaderboard-from-pause'): void;
+  (e: 'open-settings-from-pause'): void;
   (e: 'claim-mission', id: string): void;
   (e: 'refresh-leaderboard'): void;
   (e: 'buy-skin', skin: SkinDefinition): void;
@@ -201,6 +209,7 @@ const promptRestoreProgressFromSettings = async () => {
     variant="win"
     :level="level"
     :bonus="lastLevelBonus"
+    :stars-breakdown="lastLevelStars"
     :coins-earned="lastCoinsEarned"
     @next="emit('next-level')"
     @retry="emit('retry-level')"
@@ -218,10 +227,16 @@ const promptRestoreProgressFromSettings = async () => {
     :is-open="isPauseOpen"
     variant="pause"
     :level="level"
+    :score="score"
+    :unclaimed-missions-count="unclaimedMissionsCount"
     @resume="emit('resume-pause')"
     @retry="emit('retry-level')"
     @open-tutorial="emit('open-tutorial')"
     @open-map="emit('open-map-from-pause')"
+    @open-missions="emit('open-missions-from-pause')"
+    @open-shop="emit('open-shop-from-pause')"
+    @open-leaderboard="emit('open-leaderboard-from-pause')"
+    @open-settings="emit('open-settings-from-pause')"
   />
 
   <!-- ════════ TUTORIAL MODAL (3 STEPS) ════════ -->
@@ -251,7 +266,7 @@ const promptRestoreProgressFromSettings = async () => {
     :is-loading="isLeaderboardLoading"
     @update:is-open="emit('update:isLeaderboardOpen', $event)"
     @refresh="emit('refresh-leaderboard')"
-    @update-name="onUpdateName($event)"
+    @update-name="props.onUpdateName($event)"
   />
 
   <!-- ════════ SETTINGS MODAL ════════ -->
@@ -293,6 +308,7 @@ const promptRestoreProgressFromSettings = async () => {
     :is-open="isMapOpen"
     :current-level="level"
     :max-unlocked-level="userCurrentLevel"
+    :level-stars-map="levelStarsMap"
     @update:is-open="emit('update:isMapOpen', $event)"
     @select-level="emit('select-level', $event)"
   />

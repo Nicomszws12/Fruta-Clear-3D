@@ -16,6 +16,7 @@ import type { ShopTab } from '../components/ShopModal.vue';
 
 import GameHud from '../components/GameHud.vue';
 import GameBackgroundDecor from '../components/GameBackgroundDecor.vue';
+import LevelIntroOverlay from '../components/LevelIntroOverlay.vue';
 import GameBoard from '../components/GameBoard.vue';
 import GameTray from '../components/GameTray.vue';
 import GamePowerUps from '../components/GamePowerUps.vue';
@@ -62,10 +63,16 @@ const {
   powerUpState,
   gameStatus,
   hintedTileIds,
+  matchingTileIds,
   wigglingTileId,
   isAnimating,
+  isTrayFullError,
   MAX_TRAY,
   canUseHint,
+  lastLevelStars,
+  levelStarsMap,
+  levelIntroBanner,
+  dismissLevelIntro,
   totalLevelTiles,
   remainingTiles,
   levelProgress,
@@ -151,12 +158,14 @@ const handleRetryLevel = () => {
 
 const openShop = (tab: ShopTab = 'skins') => {
   playTap();
+  isPauseOpen.value = false;
   shopInitialTab.value = tab;
   isShopOpen.value = true;
 };
 
 const openLeaderboard = async () => {
   playTap();
+  isPauseOpen.value = false;
   isLeaderboardOpen.value = true;
   await fetchLeaderboard();
 };
@@ -192,7 +201,12 @@ watch(gameStatus, async status => {
   } else if (status === 'lost') {
     lastCoinsEarned.value = 0;
     await saveProgress(score.value, userCurrentLevel.value);
-    isLoseOpen.value = true;
+    // #5 Wait 360ms so the player sees the 7th tile enter and the tray shake in red before the Lose dialog opens
+    setTimeout(() => {
+      if (gameStatus.value === 'lost') {
+        isLoseOpen.value = true;
+      }
+    }, 360);
   }
 });
 
@@ -303,6 +317,12 @@ onUnmounted(() => {
           :combo-banner="comboBanner"
         />
 
+        <!-- #3 1.5s Level & World Intro Overlay -->
+        <LevelIntroOverlay
+          :intro="levelIntroBanner"
+          @dismiss="dismissLevelIntro"
+        />
+
         <GameBoard
           :board-tiles="boardTiles"
           :grid-cols="gridCols"
@@ -329,6 +349,8 @@ onUnmounted(() => {
             :tray="tray"
             :max-tray="MAX_TRAY"
             :is-tray-critical="isTrayCritical"
+            :matching-tile-ids="matchingTileIds"
+            :is-tray-full-error="isTrayFullError"
           />
         </div>
       </div>
@@ -349,7 +371,10 @@ onUnmounted(() => {
       :level="level"
       :score="score"
       :last-level-bonus="lastLevelBonus"
+      :last-level-stars="lastLevelStars"
+      :level-stars-map="levelStarsMap"
       :last-coins-earned="lastCoinsEarned"
+      :unclaimed-missions-count="dailyMissions.unclaimedCount.value"
       :username="username"
       :user-uid="userUid"
       :active-recovery-code="activeRecoveryCode"
@@ -384,6 +409,10 @@ onUnmounted(() => {
       @resume-pause="playTap(); isPauseOpen = false"
       @open-tutorial="isPauseOpen = false; isSettingsOpen = false; isTutorialOpen = true"
       @open-map-from-pause="isPauseOpen = false; isMapOpen = true"
+      @open-missions-from-pause="isPauseOpen = false; isMissionsOpen = true"
+      @open-shop-from-pause="openShop('skins')"
+      @open-leaderboard-from-pause="openLeaderboard"
+      @open-settings-from-pause="isPauseOpen = false; isSettingsOpen = true"
       @claim-mission="handleClaimMission"
       @refresh-leaderboard="fetchLeaderboard"
       @buy-skin="shop.buySkin($event)"
