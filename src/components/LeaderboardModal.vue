@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { watch } from 'vue';
 import {
   IonModal,
   IonHeader,
@@ -34,6 +34,7 @@ const close = () => {
   emit('update:isOpen', false);
 };
 
+watch(() => props.isOpen, open => { if (open) emit('refresh'); });
 const handleRefresh = () => {
   emit('refresh');
 };
@@ -246,8 +247,8 @@ const formatScore = (num: number) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--game-font, sans-serif);
-  font-size: 15px;
+  font-family: var(--game-font-narrow, sans-serif);
+  font-size: 14px;
   letter-spacing: 0.5px;
   font-weight: 900;
   color: #0f172a;
@@ -427,7 +428,7 @@ const formatScore = (num: number) => {
 }
 
 .pillar-rank {
-  font-family: var(--game-font, sans-serif);
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 16px;
   font-weight: 900;
   color: #ffffff;
@@ -530,7 +531,7 @@ const formatScore = (num: number) => {
 
 .score-number {
   font-family: var(--game-font-narrow, sans-serif);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   color: #d97706;
 }
@@ -579,7 +580,7 @@ const formatScore = (num: number) => {
 }
 
 .user-rank-value {
-  font-family: var(--game-font, sans-serif);
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 16px;
   font-weight: 900;
   color: #b45309;
@@ -598,7 +599,7 @@ const formatScore = (num: number) => {
 }
 
 .user-display-name {
-  font-family: var(--game-font, sans-serif);
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 14px;
   font-weight: 800;
   color: #1e293b;

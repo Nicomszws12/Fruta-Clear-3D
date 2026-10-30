@@ -185,6 +185,76 @@ export function useFirebase() {
   };
 
   /**
+   * Safe helper that creates or updates `/users/{userUid}` while strictly respecting
+   * both deployed Firestore rules (`createdAt` required & immutable on update,
+   * only allowed schema fields, bounded deltas).
+   */
+  const syncUserProfileToFirestore = async (): Promise<void> => {
+    if (!userUid.value) return;
+    try {
+      const userRef = doc(db, 'users', userUid.value);
+      const snap = await getDoc(userRef);
+      const safeSkins =
+        Array.isArray(unlockedSkins.value) && unlockedSkins.value.length > 0
+          ? unlockedSkins.value
+          : ['default_fruits'];
+      const safeBgs =
+        Array.isArray(unlockedBackgrounds.value) && unlockedBackgrounds.value.length > 0
+          ? unlockedBackgrounds.value
+          : ['default_blue'];
+      const safeActiveSkin = safeSkins.includes(activeSkin.value)
+        ? activeSkin.value
+        : safeSkins[0];
+      const safeActiveBg = safeBgs.includes(activeBackground.value)
+        ? activeBackground.value
+        : safeBgs[0];
+      const cleanName = (username.value || 'Jugador').trim().slice(0, 30) || 'Jugador';
+
+      if (snap.exists()) {
+        const old = snap.data();
+        const oldLevel = typeof old.currentLevel === 'number' ? old.currentLevel : 1;
+        const oldScore = typeof old.highScore === 'number' ? old.highScore : 0;
+        const oldCoins = typeof old.coins === 'number' ? old.coins : 0;
+
+        const nextLevel = Math.max(oldLevel, Math.min(userCurrentLevel.value || 1, oldLevel + 5));
+        const nextScore = Math.max(oldScore, Math.min(userHighScore.value || 0, oldScore + 50000));
+        const nextCoins = Math.max(0, Math.min(userCoins.value || 0, oldCoins + 250));
+
+        await setDoc(
+          userRef,
+          {
+            username: cleanName,
+            highScore: nextScore,
+            currentLevel: nextLevel,
+            coins: nextCoins,
+            activeSkin: safeActiveSkin,
+            activeBackground: safeActiveBg,
+            unlockedSkins: safeSkins,
+            unlockedBackgrounds: safeBgs,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      } else {
+        await setDoc(userRef, {
+          username: cleanName,
+          highScore: Math.min(500000, Math.max(0, userHighScore.value || 0)),
+          currentLevel: Math.min(500, Math.max(1, userCurrentLevel.value || 1)),
+          coins: Math.min(2000, Math.max(0, userCoins.value || 0)),
+          activeSkin: safeActiveSkin,
+          activeBackground: safeActiveBg,
+          unlockedSkins: safeSkins,
+          unlockedBackgrounds: safeBgs,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      console.warn('No se pudo sincronizar perfil en Firestore:', err);
+    }
+  };
+
+  /**
    * Sign in anonymously or re-use existing session, then load or create profile.
    */
   const authenticateAndLoadProfile = async (): Promise<{
@@ -259,6 +329,11 @@ export function useFirebase() {
           isGoogleLinked: isGoogleLinked.value,
         });
 
+        if (bestLevel > cloudLevel || bestScore > cloudScore || bestCoins > cloudCoins) {
+          await syncUserProfileToFirestore();
+        }
+        fetchLeaderboard().catch(() => {});
+
         return {
           isNewUser: false,
           savedScore: userHighScore.value,
@@ -266,7 +341,9 @@ export function useFirebase() {
         };
       }
 
-      if (userCurrentLevel.value > 1 || userCoins.value > 0) {
+      if (userCurrentLevel.value > 1 || userCoins.value > 0 || userHighScore.value > 0) {
+        await syncUserProfileToFirestore();
+        fetchLeaderboard().catch(() => {});
         return {
           isNewUser: false,
           savedScore: userHighScore.value,
@@ -274,6 +351,7 @@ export function useFirebase() {
         };
       }
 
+      fetchLeaderboard().catch(() => {});
       return {
         isNewUser: true,
         savedScore: 0,
@@ -397,27 +475,9 @@ export function useFirebase() {
       // Fallback to strict Firestore rule-validated update when Cloud Functions emulator/deployment is offline
     }
 
-    // 2. Fallback path: Single atomic update respecting strict Firestore rules (+1 level, max +10 coins)
-    try {
-      const userRef = doc(db, 'users', userUid.value);
-      await setDoc(
-        userRef,
-        {
-          username: username.value,
-          highScore: userHighScore.value,
-          currentLevel: userCurrentLevel.value,
-          coins: userCoins.value,
-          activeSkin: activeSkin.value || 'default_fruits',
-          activeBackground: activeBackground.value || 'default_blue',
-          unlockedSkins: unlockedSkins.value || ['default_fruits'],
-          unlockedBackgrounds: unlockedBackgrounds.value || ['default_blue'],
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    } catch (err) {
-      console.warn('No se pudo sincronizar victoria en Firestore:', err);
-    }
+    // 2. Fallback path: Single atomic update respecting strict Firestore rules
+    await syncUserProfileToFirestore();
+    fetchLeaderboard().catch(() => {});
 
     return { coinsGranted: coinsToGrant, nextLevel: nextUnlockedLevel };
   };
@@ -446,26 +506,7 @@ export function useFirebase() {
 
     if (!userUid.value) return;
 
-    try {
-      const userRef = doc(db, 'users', userUid.value);
-      await setDoc(
-        userRef,
-        {
-          username: username.value,
-          highScore: userHighScore.value,
-          currentLevel: userCurrentLevel.value,
-          coins: userCoins.value,
-          activeSkin: activeSkin.value || 'default_fruits',
-          activeBackground: activeBackground.value || 'default_blue',
-          unlockedSkins: unlockedSkins.value || ['default_fruits'],
-          unlockedBackgrounds: unlockedBackgrounds.value || ['default_blue'],
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    } catch (err) {
-      console.warn('No se pudo actualizar progreso en Firestore:', err);
-    }
+    await syncUserProfileToFirestore();
   };
 
   /**
@@ -672,11 +713,7 @@ export function useFirebase() {
     if (!userUid.value) return true;
 
     try {
-      const userRef = doc(db, 'users', userUid.value);
-      await updateDoc(userRef, {
-        username: trimmed,
-        updatedAt: serverTimestamp(),
-      });
+      await syncUserProfileToFirestore();
       return true;
     } catch (err) {
       console.error('Error actualizando apodo:', err);
@@ -685,47 +722,132 @@ export function useFirebase() {
   };
 
   /**
-   * Fetch top 50 players for the Global Leaderboard (reading from `/leaderboard` first,
-   * falling back to `/users`), plus calculate exact rank outside Top 50 via server count().
+   * Fetch top 50 players for the Global Leaderboard from `/users` (and `/leaderboard` if available),
+   * deduplicating by username with the highest score/level so all real players (e.g. Cecilia19,
+   * Nicolas12, Nicoms12) always appear with accurate rankings.
    */
   const fetchLeaderboard = async () => {
     isLeaderboardLoading.value = true;
     try {
-      let sourceCol = collection(db, 'leaderboard');
-      let q = query(sourceCol, orderBy('highScore', 'desc'), limit(50));
-      let snap = await getDocs(q);
-
-      if (snap.empty) {
-        sourceCol = collection(db, 'users');
-        q = query(sourceCol, orderBy('highScore', 'desc'), limit(50));
-        snap = await getDocs(q);
+      await ensureAuthReady();
+      if (!auth.currentUser) {
+        try {
+          const cred = await signInAnonymously(auth);
+          userUid.value = cred.user.uid;
+        } catch {
+          // Continue with cached state if offline
+        }
+      } else if (!userUid.value) {
+        userUid.value = auth.currentUser.uid;
       }
 
-      let rank = 1;
-      let myRank: number | null = null;
-      const list: LeaderboardUser[] = [];
+      if (userUid.value && (userHighScore.value > 0 || userCurrentLevel.value > 1)) {
+        await syncUserProfileToFirestore();
+      }
 
-      snap.forEach(docSnap => {
-        const d = docSnap.data();
-        const uid = docSnap.id;
-        const entry: LeaderboardUser = {
-          uid,
-          username: d.username || 'Anónimo',
-          highScore: d.highScore || 0,
-          currentLevel: d.currentLevel || 1,
-          rank,
-        };
-        list.push(entry);
+      const byKey = new Map<string, LeaderboardUser>();
+      const usersCol = collection(db, 'users');
 
-        if (uid === userUid.value) {
-          myRank = rank;
+      // 1. Primary source: `/users` collection (readable by all authenticated users)
+      try {
+        const usersSnap = await getDocs(query(usersCol, orderBy('highScore', 'desc'), limit(50)));
+        usersSnap.forEach(docSnap => {
+          const d = docSnap.data();
+          const uid = docSnap.id;
+          const name = (d.username || 'Anónimo').trim();
+          const scoreVal = typeof d.highScore === 'number' ? d.highScore : 0;
+          const levelVal = typeof d.currentLevel === 'number' ? d.currentLevel : 1;
+          const normKey = name.toLowerCase();
+          const existing = byKey.get(normKey);
+          if (
+            !existing ||
+            scoreVal > existing.highScore ||
+            (scoreVal === existing.highScore && levelVal > existing.currentLevel)
+          ) {
+            byKey.set(normKey, {
+              uid: uid === userUid.value || existing?.uid === userUid.value ? userUid.value : uid,
+              username: name,
+              highScore: Math.max(scoreVal, existing?.highScore || 0),
+              currentLevel: Math.max(levelVal, existing?.currentLevel || 1),
+              rank: 0,
+            });
+          } else if (uid === userUid.value && existing) {
+            existing.uid = userUid.value;
+          }
+        });
+      } catch (usersErr) {
+        console.warn('Error consultando /users para clasificación:', usersErr);
+      }
+
+      // 2. Optional secondary source: `/leaderboard` (isolated try/catch so permission-denied never blocks `/users`)
+      try {
+        const lbCol = collection(db, 'leaderboard');
+        const lbSnap = await getDocs(query(lbCol, orderBy('highScore', 'desc'), limit(50)));
+        lbSnap.forEach(docSnap => {
+          const d = docSnap.data();
+          const uid = docSnap.id;
+          const name = (d.username || 'Anónimo').trim();
+          const scoreVal = typeof d.highScore === 'number' ? d.highScore : 0;
+          const levelVal = typeof d.currentLevel === 'number' ? d.currentLevel : 1;
+          const normKey = name.toLowerCase();
+          const existing = byKey.get(normKey);
+          if (
+            !existing ||
+            scoreVal > existing.highScore ||
+            (scoreVal === existing.highScore && levelVal > existing.currentLevel)
+          ) {
+            byKey.set(normKey, {
+              uid: uid === userUid.value || existing?.uid === userUid.value ? userUid.value : uid,
+              username: name,
+              highScore: Math.max(scoreVal, existing?.highScore || 0),
+              currentLevel: Math.max(levelVal, existing?.currentLevel || 1),
+              rank: 0,
+            });
+          }
+        });
+      } catch {
+        // Ignore if /leaderboard is not enabled in deployed Firestore rules
+      }
+
+      // 3. Ensure active player's latest local progress is always reflected
+      if (userUid.value && (userHighScore.value > 0 || userCurrentLevel.value > 1 || byKey.size > 0)) {
+        const myName = (username.value || 'Jugador').trim();
+        const normKey = myName.toLowerCase();
+        const existing = byKey.get(normKey);
+        if (existing) {
+          existing.uid = userUid.value;
+          existing.highScore = Math.max(existing.highScore, userHighScore.value);
+          existing.currentLevel = Math.max(existing.currentLevel, userCurrentLevel.value);
+        } else if (userHighScore.value > 0 || userCurrentLevel.value > 1) {
+          byKey.set(normKey, {
+            uid: userUid.value,
+            username: myName,
+            highScore: userHighScore.value,
+            currentLevel: userCurrentLevel.value,
+            rank: 0,
+          });
         }
-        rank++;
+      }
+
+      const sorted = Array.from(byKey.values()).sort(
+        (a, b) => b.highScore - a.highScore || b.currentLevel - a.currentLevel,
+      );
+
+      let myRank: number | null = null;
+      const list: LeaderboardUser[] = sorted.slice(0, 50).map((entry, idx) => {
+        const r = idx + 1;
+        if (entry.uid === userUid.value) {
+          myRank = r;
+        }
+        return {
+          ...entry,
+          rank: r,
+        };
       });
 
       if (myRank === null && userHighScore.value > 0) {
         try {
-          const higherQuery = query(sourceCol, where('highScore', '>', userHighScore.value));
+          const higherQuery = query(usersCol, where('highScore', '>', userHighScore.value));
           const countSnap = await getCountFromServer(higherQuery);
           myRank = countSnap.data().count + 1;
         } catch {
