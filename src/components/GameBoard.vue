@@ -164,8 +164,8 @@ const matStyle = computed(() => ({
 .board-container {
   --tile-size: min(
     calc((100vw - 20px) / var(--grid-cols)),
-    calc((100dvh - 200px) / var(--grid-rows)),
-    calc((100vh - 200px) / var(--grid-rows)),
+    calc((100dvh - 216px) / var(--grid-rows)),
+    calc((100vh - 216px) / var(--grid-rows)),
     64px
   );
 

@@ -560,14 +560,15 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  gap: 4px;
+  gap: 12px;
   flex-shrink: 0;
   z-index: 20;
-  padding-bottom: max(4px, env(safe-area-inset-bottom, 0px));
+  padding-top: 4px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
 
 @media (max-height: 670px) {
   .game-layout { padding: 2px 4px 0; }
-  .bottom-controls { gap: 2px; padding-bottom: 2px; }
+  .bottom-controls { gap: 8px; padding-top: 2px; padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)); }
 }
 </style>

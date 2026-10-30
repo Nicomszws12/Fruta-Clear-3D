@@ -119,8 +119,8 @@ const formatScore = (num: number) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  gap: 8px;
+  padding: 6px 8px;
+  gap: 6px;
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
@@ -137,7 +137,7 @@ const formatScore = (num: number) => {
   cursor: pointer;
   box-sizing: border-box;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
-  padding: 4px 10px;
+  padding: 4px 8px;
 }
 
 .hud-touch-pill:active {
@@ -146,25 +146,25 @@ const formatScore = (num: number) => {
 
 /* 1. Avatar & Username */
 .hud-profile {
-  gap: 7px;
+  gap: 5px;
   background: #f0f9ff;
   border: 2px solid #bae6fd;
   box-shadow: 0 3px 0 #7dd3fc;
-  padding: 4px 10px 4px 6px;
-  flex-shrink: 1;
+  padding: 4px 8px 4px 5px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .hud-avatar {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--game-font, sans-serif);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   color: #ffffff;
   flex-shrink: 0;
@@ -173,31 +173,32 @@ const formatScore = (num: number) => {
 
 .hud-username {
   font-family: var(--game-font-narrow, sans-serif);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 68px;
+  max-width: 56px;
 }
 
 /* 2. Coins Pill */
 .hud-coin-chip {
-  gap: 5px;
+  gap: 4px;
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   border: 2px solid #f59e0b;
   box-shadow: 0 3px 0 #d97706;
+  padding: 4px 8px;
   flex-shrink: 0;
 }
 
 .coin-icon {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
 }
 
 .coin-val {
-  font-family: var(--game-font, sans-serif);
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 12px;
   font-weight: 900;
   color: #92400e;
@@ -206,7 +207,7 @@ const formatScore = (num: number) => {
 
 /* 3. Level & Progress Pill */
 .hud-level-pill {
-  flex: 1;
+  flex: 1 0 auto;
   flex-direction: column;
   justify-content: center;
   align-items: stretch;
@@ -214,20 +215,20 @@ const formatScore = (num: number) => {
   background: #ffffff;
   border: 2px solid #bae6fd;
   box-shadow: 0 3px 0 #38bdf8;
-  padding: 5px 10px;
-  min-width: 96px;
-  max-width: 155px;
+  padding: 5px 9px;
+  min-width: 112px;
 }
 
 .level-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
 }
 
 .level-badge {
-  font-family: var(--game-font, sans-serif);
+  font-family: var(--game-font-narrow, sans-serif);
   font-size: 11px;
   font-weight: 900;
   color: #0369a1;
@@ -235,11 +236,13 @@ const formatScore = (num: number) => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex-shrink: 0;
 }
 
 .level-star {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .progress-count {
@@ -248,6 +251,7 @@ const formatScore = (num: number) => {
   font-weight: 800;
   color: #475569;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .level-progress-track {
@@ -325,16 +329,16 @@ const formatScore = (num: number) => {
 
 @media (max-width: 360px) {
   .hud-container {
-    padding: 5px 6px;
-    gap: 5px;
+    padding: 5px 5px;
+    gap: 4px;
   }
   .hud-username {
-    max-width: 46px;
-    font-size: 11px;
+    max-width: 42px;
+    font-size: 10.5px;
   }
   .hud-level-pill {
-    min-width: 82px;
-    padding: 4px 8px;
+    min-width: 102px;
+    padding: 4px 7px;
   }
 }
 </style>

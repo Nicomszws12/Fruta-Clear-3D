@@ -87,7 +87,7 @@ const emit = defineEmits<{
   gap: 12px;
   justify-content: center;
   flex-shrink: 0;
-  margin: 0;
+  margin: 0 0 5px;
 }
 
 .powerup-btn {
@@ -195,7 +195,7 @@ const emit = defineEmits<{
 
 @media (max-height: 700px) {
   .powerups-bar {
-    margin: 0;
+    margin: 0 0 4px;
     gap: 8px;
   }
   .powerup-btn {
