@@ -6,14 +6,17 @@ import { playClick, playSwitch } from '../game/sounds';
 const props = defineProps<{
   isOpen: boolean;
   username: string;
-  userUid?: string;
+  activeRecoveryCode?: string;
+  isGoogleLinked?: boolean;
   currentLevel?: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
   (e: 'edit-name'): void;
+  (e: 'generate-recovery-code'): void;
   (e: 'restore-progress'): void;
+  (e: 'link-google'): void;
   (e: 'open-tutorial'): void;
 }>();
 
@@ -33,7 +36,7 @@ const {
   appTitle,
 } = useGameSettings();
 
-const copiedUid = ref(false);
+const copiedCode = ref(false);
 
 const close = () => {
   playClick();
@@ -71,9 +74,19 @@ const handleEditName = () => {
   emit('edit-name');
 };
 
+const handleGenerateRecoveryCode = () => {
+  playClick();
+  emit('generate-recovery-code');
+};
+
 const handleRestoreProgress = () => {
   playClick();
   emit('restore-progress');
+};
+
+const handleLinkGoogle = () => {
+  playClick();
+  emit('link-google');
 };
 
 const handleOpenTutorial = () => {
@@ -81,14 +94,14 @@ const handleOpenTutorial = () => {
   emit('open-tutorial');
 };
 
-const copyRecoveryId = async () => {
-  if (!props.userUid) return;
+const copyOneTimeCode = async () => {
+  if (!props.activeRecoveryCode) return;
   playClick();
   try {
-    await navigator.clipboard.writeText(props.userUid);
-    copiedUid.value = true;
+    await navigator.clipboard.writeText(props.activeRecoveryCode);
+    copiedCode.value = true;
     setTimeout(() => {
-      copiedUid.value = false;
+      copiedCode.value = false;
     }, 2000);
   } catch {
     // ignore
@@ -254,9 +267,9 @@ const copyRecoveryId = async () => {
                 </div>
               </div>
 
-              <!-- ─── Player Section ─── -->
+              <!-- ─── Player & Security Section (P0-1) ─── -->
               <div class="setting-group">
-                <div class="group-title">👤 PERFIL Y SEGURIDAD</div>
+                <div class="group-title">👤 PERFIL Y SEGURIDAD (1 SOLO USO)</div>
                 <div class="setting-row player-row">
                   <div class="player-info">
                     <span class="row-label">Tu Apodo</span>
@@ -267,27 +280,59 @@ const copyRecoveryId = async () => {
                   </button>
                 </div>
 
-                <!-- Private Recovery Code Box -->
-                <div class="setting-row player-row uid-row" v-if="userUid">
+                <!-- Google Account Link -->
+                <div class="setting-row player-row uid-row">
                   <div class="player-info uid-info">
-                    <span class="row-label">Código de Recuperación Privado</span>
-                    <code class="uid-code">{{ userUid }}</code>
+                    <span class="row-label">Cuenta Vinculada</span>
+                    <span class="row-desc">
+                      {{ isGoogleLinked ? 'Protegida con Google Auth' : 'Sesión local/anónima' }}
+                    </span>
                   </div>
-                  <button type="button" class="btn-copy-uid" @click="copyRecoveryId">
-                    <span>{{ copiedUid ? '✅ Copiado' : '📋 Copiar' }}</span>
+                  <button
+                    type="button"
+                    class="btn-copy-uid"
+                    :disabled="isGoogleLinked"
+                    @click="handleLinkGoogle"
+                  >
+                    <span>{{ isGoogleLinked ? '✅ Google' : '🔗 Vincular Google' }}</span>
                   </button>
                 </div>
 
-                <!-- Recovery Row -->
+                <!-- Single-Use Recovery Code Generator -->
+                <div class="setting-row player-row uid-row">
+                  <div class="player-info uid-info">
+                    <span class="row-label">Código de 1 Solo Uso</span>
+                    <code v-if="activeRecoveryCode" class="uid-code">{{ activeRecoveryCode }}</code>
+                    <span v-else class="row-desc">Genera un token único para cambiar de móvil</span>
+                  </div>
+                  <button
+                    v-if="activeRecoveryCode"
+                    type="button"
+                    class="btn-copy-uid"
+                    @click="copyOneTimeCode"
+                  >
+                    <span>{{ copiedCode ? '✅ Copiado' : '📋 Copiar' }}</span>
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn-copy-uid"
+                    @click="handleGenerateRecoveryCode"
+                  >
+                    <span>🔐 Generar</span>
+                  </button>
+                </div>
+
+                <!-- Redeem Single-Use Code Row -->
                 <div class="setting-row player-row recovery-row">
                   <div class="player-info">
                     <span class="row-label">
                       Nivel Actual: <strong class="lvl-highlight">{{ currentLevel || 1 }}</strong>
                     </span>
-                    <span class="row-desc">Restaurar con Código Privado</span>
+                    <span class="row-desc">Canjear código FC3D-XXXX-XXXX</span>
                   </div>
                   <button type="button" class="btn-restore-profile" @click="handleRestoreProgress">
-                    <span>🔄 Recuperar</span>
+                    <span>🔄 Canjear</span>
                   </button>
                 </div>
               </div>
@@ -600,10 +645,11 @@ const copyRecoveryId = async () => {
 }
 
 .uid-code {
-  font-size: 9px;
-  color: #475569;
+  font-size: 10px;
+  font-weight: 800;
+  color: #0f172a;
   background: #e2e8f0;
-  padding: 2px 5px;
+  padding: 2px 6px;
   border-radius: 6px;
   margin-top: 2px;
   overflow: hidden;
@@ -612,9 +658,9 @@ const copyRecoveryId = async () => {
 }
 
 .btn-copy-uid {
-  background: #64748b;
-  border: 1.5px solid #475569;
-  box-shadow: 0 2px 0 #334155;
+  background: #0284c7;
+  border: 1.5px solid #0369a1;
+  box-shadow: 0 2px 0 #075985;
   border-radius: 10px;
   color: #fff;
   font-family: var(--game-font, sans-serif);
@@ -623,6 +669,13 @@ const copyRecoveryId = async () => {
   padding: 5px 8px;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.btn-copy-uid:disabled {
+  background: #10b981;
+  border-color: #059669;
+  box-shadow: none;
+  cursor: default;
 }
 
 .player-current-name {

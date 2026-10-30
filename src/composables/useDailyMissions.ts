@@ -3,6 +3,7 @@
  *
  * Automatically resets each calendar day (YYYY-MM-DD) and persists
  * progress to LocalStorage + Capacitor Preferences.
+ * Reward claims are server-verified via Cloud Functions (`claimDailyMission`).
  */
 import { ref, computed } from 'vue';
 import { Preferences } from '@capacitor/preferences';
@@ -124,7 +125,7 @@ export function useDailyMissions() {
 
   const claimMissionReward = async (
     missionId: string,
-    addCoinsFn: (amount: number) => Promise<void>,
+    claimVerifiedFn: (missionType: string, rewardCoins: number) => Promise<void>,
   ): Promise<number> => {
     ensureToday();
     const target = missions.value.find(m => m.id === missionId);
@@ -133,7 +134,7 @@ export function useDailyMissions() {
     target.claimed = true;
     saveMissions();
     playPowerup();
-    await addCoinsFn(target.rewardCoins);
+    await claimVerifiedFn(target.type, target.rewardCoins);
     return target.rewardCoins;
   };
 
@@ -150,4 +151,3 @@ export function useDailyMissions() {
     claimMissionReward,
   };
 }
-

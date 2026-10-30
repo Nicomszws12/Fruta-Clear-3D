@@ -172,7 +172,6 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
 }
 
 .tile.is-wiggling {
-  will-change: transform;
   animation: tileWiggle 0.22s ease;
 }
 
@@ -224,7 +223,6 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
 }
 
 .tile.is-hinted {
-  will-change: transform, filter;
   animation: hintPulse 0.5s ease infinite alternate;
   z-index: 999 !important;
 }

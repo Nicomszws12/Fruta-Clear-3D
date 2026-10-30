@@ -30,7 +30,7 @@ interface UseFirebaseReturn {
   unlockedBackgrounds: { value: string[] };
   purchaseItem: (itemId: string, price: number, type: ShopItemType) => Promise<boolean>;
   equipItem: (itemId: string, type: ShopItemType) => Promise<boolean>;
-  spendCoins?: (price: number) => Promise<boolean>;
+  spendCoins?: (price: number, packId?: string) => Promise<boolean>;
 }
 
 export function useShop(firebase: UseFirebaseReturn) {
@@ -101,7 +101,7 @@ export function useShop(firebase: UseFirebaseReturn) {
     if (!canAfford(pack.price) || !fbSpendCoins) return false;
 
     playClick();
-    const ok = await fbSpendCoins(pack.price);
+    const ok = await fbSpendCoins(pack.price, pack.id);
     if (ok) {
       onGrant(pack.rewards);
       playPowerup();

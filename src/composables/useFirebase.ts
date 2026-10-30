@@ -1,11 +1,22 @@
 /**
  * Firebase composable — singleton authentication, user profile, persistence,
+ * Cloud Functions verified economy (verifyLevelWin, claimDailyMission, purchaseShopItem),
+ * single-use recovery codes (FC3D-XXXX-XXXX) + Google Auth linking,
  * global leaderboard queries (with real rank beyond top 50), cosmetics inventory,
  * and offline-first dual-storage sync (LocalStorage + Capacitor Preferences + Cloud Firestore).
  */
 import { ref } from 'vue';
 import { Preferences } from '@capacitor/preferences';
-import { db, auth, signInAnonymously } from '../firebase';
+import {
+  db,
+  auth,
+  functions,
+  httpsCallable,
+  signInAnonymously,
+  googleProvider,
+  linkWithPopup,
+  signInWithPopup,
+} from '../firebase';
 import {
   doc,
   setDoc,
@@ -21,8 +32,27 @@ import {
   arrayUnion,
   increment,
   where,
+  runTransaction,
 } from 'firebase/firestore';
 import type { LeaderboardUser, ShopItemType } from '../game/types';
+
+// ─── Single-Use Recovery Code Helpers (P0-1) ───────────────────
+const RECOVERY_CODE_REGEX = /^FC3D-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function isValidSingleUseRecoveryCode(input: string): boolean {
+  if (!input) return false;
+  return RECOVERY_CODE_REGEX.test(input.trim().toUpperCase());
+}
+
+export function generateRecoveryCodeFormat(): string {
+  const block = () =>
+    Array.from(
+      { length: 4 },
+      () => RECOVERY_ALPHABET[Math.floor(Math.random() * RECOVERY_ALPHABET.length)],
+    ).join('');
+  return `FC3D-${block()}-${block()}`;
+}
 
 // ─── Local Storage + Capacitor Preferences Cache ───────────────
 const LOCAL_STORAGE_KEY = 'tileclear_player_save_v1';
@@ -38,6 +68,8 @@ export interface LocalPlayerData {
   unlockedSkins: string[];
   unlockedBackgrounds: string[];
   tutorialCompleted?: boolean;
+  isGoogleLinked?: boolean;
+  lastRecoveryCode?: string;
   updatedAt?: number;
 }
 
@@ -64,6 +96,7 @@ export function setLocalSave(data: Partial<LocalPlayerData>) {
       unlockedSkins: ['default_fruits'],
       unlockedBackgrounds: ['default_blue'],
       tutorialCompleted: false,
+      isGoogleLinked: false,
     };
     const merged: LocalPlayerData = {
       ...existing,
@@ -72,7 +105,6 @@ export function setLocalSave(data: Partial<LocalPlayerData>) {
     };
     const serialized = JSON.stringify(merged);
     localStorage.setItem(LOCAL_STORAGE_KEY, serialized);
-    // Async mirror to Capacitor Preferences for native process-kill durability
     Preferences.set({ key: LOCAL_STORAGE_KEY, value: serialized }).catch(() => {});
   } catch (e) {
     console.warn('Error writing local save:', e);
@@ -94,6 +126,8 @@ const activeBackground = ref(initialLocal?.activeBackground || 'default_blue');
 const unlockedSkins = ref<string[]>(initialLocal?.unlockedSkins || ['default_fruits']);
 const unlockedBackgrounds = ref<string[]>(initialLocal?.unlockedBackgrounds || ['default_blue']);
 const tutorialCompleted = ref<boolean>(Boolean(initialLocal?.tutorialCompleted));
+const isGoogleLinked = ref<boolean>(Boolean(initialLocal?.isGoogleLinked));
+const activeRecoveryCode = ref<string>(initialLocal?.lastRecoveryCode || '');
 
 // Leaderboard state
 const leaderboardList = ref<LeaderboardUser[]>([]);
@@ -127,6 +161,12 @@ async function hydrateFromNativePreferences(): Promise<void> {
       if (nativeData.tutorialCompleted) {
         tutorialCompleted.value = true;
       }
+      if (nativeData.isGoogleLinked) {
+        isGoogleLinked.value = true;
+      }
+      if (nativeData.lastRecoveryCode) {
+        activeRecoveryCode.value = nativeData.lastRecoveryCode;
+      }
     }
   } catch {
     // Ignore in environments without Capacitor Preferences
@@ -134,9 +174,6 @@ async function hydrateFromNativePreferences(): Promise<void> {
 }
 
 export function useFirebase() {
-  /**
-   * Helper to ensure auth persistence is ready before checking currentUser.
-   */
   const ensureAuthReady = async () => {
     if (typeof (auth as any).authStateReady === 'function') {
       try {
@@ -165,8 +202,9 @@ export function useFirebase() {
         currentUser = cred.user;
       }
       userUid.value = currentUser.uid;
+      isGoogleLinked.value = currentUser.providerData.some(p => p.providerId === 'google.com');
 
-      setLocalSave({ uid: userUid.value });
+      setLocalSave({ uid: userUid.value, isGoogleLinked: isGoogleLinked.value });
 
       const userRef = doc(db, 'users', userUid.value);
       const snap = await getDoc(userRef);
@@ -218,37 +256,8 @@ export function useFirebase() {
           unlockedSkins: mergedSkins,
           unlockedBackgrounds: mergedBgs,
           tutorialCompleted: true,
+          isGoogleLinked: isGoogleLinked.value,
         });
-
-        // Respect Firestore anti-cheat delta caps when syncing local progress back to cloud
-        const missingCosmetics = !('activeSkin' in data) || !('unlockedSkins' in data);
-        const safeCloudLevel = Math.min(bestLevel, cloudLevel + 5);
-        const safeCloudScore = Math.min(bestScore, cloudScore + 50000);
-        const safeCloudCoins = Math.min(bestCoins, cloudCoins + 250);
-        const hasHigherLocal =
-          safeCloudLevel > cloudLevel || safeCloudScore > cloudScore || safeCloudCoins > cloudCoins;
-
-        if (missingCosmetics || hasHigherLocal) {
-          try {
-            await setDoc(
-              userRef,
-              {
-                username: username.value,
-                highScore: safeCloudScore,
-                currentLevel: safeCloudLevel,
-                coins: safeCloudCoins,
-                activeSkin: activeSkin.value,
-                activeBackground: activeBackground.value,
-                unlockedSkins: mergedSkins,
-                unlockedBackgrounds: mergedBgs,
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true },
-            );
-          } catch (healErr) {
-            console.warn('No se pudo sincronizar reparación a Firestore:', healErr);
-          }
-        }
 
         return {
           isNewUser: false,
@@ -257,21 +266,7 @@ export function useFirebase() {
         };
       }
 
-      // Document does NOT exist in Firestore: migrate bounded local progress if present
       if (userCurrentLevel.value > 1 || userCoins.value > 0) {
-        await setDoc(userRef, {
-          username: username.value || 'Jugador',
-          highScore: Math.min(userHighScore.value, 500000),
-          currentLevel: Math.min(userCurrentLevel.value, 500),
-          coins: Math.min(userCoins.value, 2000),
-          activeSkin: activeSkin.value,
-          activeBackground: activeBackground.value,
-          unlockedSkins: unlockedSkins.value,
-          unlockedBackgrounds: unlockedBackgrounds.value,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-
         return {
           isNewUser: false,
           savedScore: userHighScore.value,
@@ -299,7 +294,8 @@ export function useFirebase() {
   };
 
   /**
-   * Called by UI after collecting nickname
+   * Called by UI after collecting nickname for a brand-new player.
+   * Starts with strict initial economy (level 1, 0 coins, 0 highScore) enforced by Firestore rules.
    */
   const registerNewUser = async (name: string) => {
     const cleanName = name.trim().slice(0, 30) || 'Jugador';
@@ -317,9 +313,9 @@ export function useFirebase() {
         userRef,
         {
           username: cleanName,
-          highScore: Math.min(userHighScore.value || 0, 500000),
-          currentLevel: Math.min(userCurrentLevel.value || 1, 500),
-          coins: Math.min(userCoins.value || 0, 2000),
+          highScore: 0,
+          currentLevel: 1,
+          coins: 0,
           activeSkin: activeSkin.value || 'default_fruits',
           activeBackground: activeBackground.value || 'default_blue',
           unlockedSkins: unlockedSkins.value || ['default_fruits'],
@@ -340,18 +336,101 @@ export function useFirebase() {
   };
 
   /**
-   * Persist high score and current level to Firestore & LocalStorage.
-   * Only increases highScore / currentLevel monotonically within economy bounds.
+   * P0-2: Server-verified level victory via Cloud Function `verifyLevelWin`.
+   * Awards +10 coins ONLY on the first completion of `wonLevel >= userCurrentLevel`,
+   * updates `userCurrentLevel` and `userHighScore`, and writes to `/leaderboard/{uid}`.
+   * Falls back to a single strict +1 level / +10 coins Firestore transaction if offline.
+   */
+  const recordVerifiedLevelWin = async (
+    wonLevel: number,
+    sessionScore: number,
+  ): Promise<{ coinsGranted: number; nextLevel: number }> => {
+    const isFirstWin = wonLevel >= userCurrentLevel.value;
+    const coinsToGrant = isFirstWin ? 10 : 0;
+    const nextUnlockedLevel = isFirstWin ? userCurrentLevel.value + 1 : userCurrentLevel.value;
+    const boundedHighScore = Math.max(
+      userHighScore.value,
+      Math.min(sessionScore, userHighScore.value + 15000),
+    );
+
+    userCurrentLevel.value = nextUnlockedLevel;
+    userHighScore.value = boundedHighScore;
+    userCoins.value += coinsToGrant;
+
+    setLocalSave({
+      highScore: userHighScore.value,
+      currentLevel: userCurrentLevel.value,
+      coins: userCoins.value,
+      username: username.value,
+      activeSkin: activeSkin.value,
+      activeBackground: activeBackground.value,
+      unlockedSkins: unlockedSkins.value,
+      unlockedBackgrounds: unlockedBackgrounds.value,
+    });
+
+    if (!userUid.value) {
+      return { coinsGranted: coinsToGrant, nextLevel: nextUnlockedLevel };
+    }
+
+    // 1. Primary path: Authoritative Cloud Function
+    try {
+      const verifyFn = httpsCallable<
+        { level: number; score: number },
+        { success: boolean; coinsGranted: number; currentLevel: number; highScore: number; coins: number }
+      >(functions, 'verifyLevelWin');
+      const response = await verifyFn({ level: wonLevel, score: sessionScore });
+      if (response.data?.success) {
+        userCurrentLevel.value = response.data.currentLevel;
+        userHighScore.value = response.data.highScore;
+        userCoins.value = response.data.coins;
+        setLocalSave({
+          highScore: userHighScore.value,
+          currentLevel: userCurrentLevel.value,
+          coins: userCoins.value,
+        });
+        return {
+          coinsGranted: response.data.coinsGranted,
+          nextLevel: response.data.currentLevel,
+        };
+      }
+    } catch {
+      // Fallback to strict Firestore rule-validated update when Cloud Functions emulator/deployment is offline
+    }
+
+    // 2. Fallback path: Single atomic update respecting strict Firestore rules (+1 level, max +10 coins)
+    try {
+      const userRef = doc(db, 'users', userUid.value);
+      await setDoc(
+        userRef,
+        {
+          username: username.value,
+          highScore: userHighScore.value,
+          currentLevel: userCurrentLevel.value,
+          coins: userCoins.value,
+          activeSkin: activeSkin.value || 'default_fruits',
+          activeBackground: activeBackground.value || 'default_blue',
+          unlockedSkins: unlockedSkins.value || ['default_fruits'],
+          unlockedBackgrounds: unlockedBackgrounds.value || ['default_blue'],
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      console.warn('No se pudo sincronizar victoria en Firestore:', err);
+    }
+
+    return { coinsGranted: coinsToGrant, nextLevel: nextUnlockedLevel };
+  };
+
+  /**
+   * Persist high score on game over without minting coins or advancing level.
    */
   const saveProgress = async (sessionScore: number, nextUnlockedLevel: number) => {
-    const prevHigh = userHighScore.value;
-    const prevLevel = userCurrentLevel.value;
-
     if (sessionScore > userHighScore.value) {
-      userHighScore.value = Math.min(sessionScore, prevHigh + 50000);
+      userHighScore.value = Math.min(sessionScore, userHighScore.value + 15000);
     }
     if (nextUnlockedLevel > userCurrentLevel.value) {
-      userCurrentLevel.value = Math.min(nextUnlockedLevel, prevLevel + 5);
+      userCurrentLevel.value = Math.min(nextUnlockedLevel, userCurrentLevel.value + 1);
     }
 
     setLocalSave({
@@ -372,6 +451,7 @@ export function useFirebase() {
       await setDoc(
         userRef,
         {
+          username: username.value,
           highScore: userHighScore.value,
           currentLevel: userCurrentLevel.value,
           coins: userCoins.value,
@@ -389,45 +469,76 @@ export function useFirebase() {
   };
 
   /**
-   * Add coins to the player's balance (capped per transaction by security rules).
+   * P0-2 / P3-2: Server-verified Daily Mission reward claim via Cloud Function `claimDailyMission`.
    */
-  const addCoins = async (amount: number) => {
-    const safeAmount = Math.min(250, Math.floor(amount));
-    if (safeAmount <= 0) return;
+  const claimVerifiedMissionReward = async (missionId: string, rewardCoins: number) => {
+    const safeReward = Math.min(45, Math.max(0, Math.floor(rewardCoins)));
+    if (safeReward <= 0) return;
 
-    userCoins.value += safeAmount;
-
-    setLocalSave({
-      coins: userCoins.value,
-    });
+    userCoins.value += safeReward;
+    setLocalSave({ coins: userCoins.value });
 
     if (!userUid.value) return;
 
+    // 1. Primary path: Cloud Function `claimDailyMission`
     try {
+      const claimFn = httpsCallable<
+        { missionId: string },
+        { success: boolean; rewardCoins: number; coins: number }
+      >(functions, 'claimDailyMission');
+      const res = await claimFn({ missionId });
+      if (res.data?.success) {
+        userCoins.value = res.data.coins;
+        setLocalSave({ coins: userCoins.value });
+        return;
+      }
+    } catch {
+      // Fallback to rule-checked mission claim
+    }
+
+    // 2. Fallback path: Rule-validated mission claim with `lastMissionClaimKey`
+    try {
+      const now = new Date();
+      const dateKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+      const claimKey = `${dateKey}_${missionId}`;
       const userRef = doc(db, 'users', userUid.value);
-      await setDoc(
-        userRef,
-        {
-          coins: increment(safeAmount),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      await updateDoc(userRef, {
+        coins: increment(safeReward),
+        lastMissionClaimKey: claimKey,
+        updatedAt: serverTimestamp(),
+      });
     } catch (err) {
-      console.warn('No se pudo agregar monedas:', err);
+      console.warn('No se pudo registrar recompensa de misión en Firestore:', err);
     }
   };
 
   /**
-   * Spend coins on power-up packs or consumables.
+   * Spend coins on power-up packs or consumables (validated via Cloud Function `purchaseShopItem`).
    */
-  const spendCoins = async (price: number): Promise<boolean> => {
+  const spendCoins = async (price: number, packId?: string): Promise<boolean> => {
     if (price <= 0 || userCoins.value < price) return false;
 
     userCoins.value -= price;
     setLocalSave({ coins: userCoins.value });
 
     if (!userUid.value) return true;
+
+    if (packId) {
+      try {
+        const purchaseFn = httpsCallable<
+          { itemId: string },
+          { success: boolean; coins: number }
+        >(functions, 'purchaseShopItem');
+        const res = await purchaseFn({ itemId: packId });
+        if (res.data?.success) {
+          userCoins.value = res.data.coins;
+          setLocalSave({ coins: userCoins.value });
+          return true;
+        }
+      } catch {
+        // Fallback to direct coin deduction
+      }
+    }
 
     try {
       const userRef = doc(db, 'users', userUid.value);
@@ -443,7 +554,7 @@ export function useFirebase() {
   };
 
   /**
-   * Purchase a cosmetic item — deducts coins and adds to inventory.
+   * Purchase a cosmetic item — validated via Cloud Function `purchaseShopItem` with Firestore fallback.
    */
   const purchaseItem = async (
     itemId: string,
@@ -469,6 +580,21 @@ export function useFirebase() {
     });
 
     if (!userUid.value) return true;
+
+    try {
+      const purchaseFn = httpsCallable<
+        { itemId: string },
+        { success: boolean; coins: number }
+      >(functions, 'purchaseShopItem');
+      const res = await purchaseFn({ itemId });
+      if (res.data?.success) {
+        userCoins.value = res.data.coins;
+        setLocalSave({ coins: userCoins.value });
+        return true;
+      }
+    } catch {
+      // Fallback to rule-checked Firestore update
+    }
 
     try {
       const userRef = doc(db, 'users', userUid.value);
@@ -559,15 +685,21 @@ export function useFirebase() {
   };
 
   /**
-   * Fetch top 50 players for the Global Leaderboard, plus calculate exact
-   * rank outside the Top 50 using Firestore server-side count aggregation.
+   * Fetch top 50 players for the Global Leaderboard (reading from `/leaderboard` first,
+   * falling back to `/users`), plus calculate exact rank outside Top 50 via server count().
    */
   const fetchLeaderboard = async () => {
     isLeaderboardLoading.value = true;
     try {
-      const usersCol = collection(db, 'users');
-      const q = query(usersCol, orderBy('highScore', 'desc'), limit(50));
-      const snap = await getDocs(q);
+      let sourceCol = collection(db, 'leaderboard');
+      let q = query(sourceCol, orderBy('highScore', 'desc'), limit(50));
+      let snap = await getDocs(q);
+
+      if (snap.empty) {
+        sourceCol = collection(db, 'users');
+        q = query(sourceCol, orderBy('highScore', 'desc'), limit(50));
+        snap = await getDocs(q);
+      }
 
       let rank = 1;
       let myRank: number | null = null;
@@ -591,10 +723,9 @@ export function useFirebase() {
         rank++;
       });
 
-      // P3-2: If user is outside top 50, calculate exact rank via server count query
       if (myRank === null && userHighScore.value > 0) {
         try {
-          const higherQuery = query(usersCol, where('highScore', '>', userHighScore.value));
+          const higherQuery = query(sourceCol, where('highScore', '>', userHighScore.value));
           const countSnap = await getCountFromServer(higherQuery);
           myRank = countSnap.data().count + 1;
         } catch {
@@ -612,11 +743,117 @@ export function useFirebase() {
   };
 
   /**
-   * P0-1 Security Fix: Restore a player's progress ONLY by their private
-   * Recovery ID (exact Firebase Auth UID >= 20 chars).
-   * Public nickname lookup is strictly disabled to prevent account/coin cloning.
+   * P0-1: Link anonymous account with Google Auth so progress is permanently bound
+   * to the player's Google identity without needing a recovery code.
    */
-  const restoreProfileByNicknameOrId = async (targetUid: string): Promise<{
+  const linkGoogleAccount = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const current = auth.currentUser;
+      const cred = current
+        ? await linkWithPopup(current, googleProvider)
+        : await signInWithPopup(auth, googleProvider);
+
+      userUid.value = cred.user.uid;
+      isGoogleLinked.value = true;
+      if (cred.user.displayName && username.value === 'Jugador') {
+        username.value = cred.user.displayName.slice(0, 30);
+      }
+      setLocalSave({
+        uid: userUid.value,
+        username: username.value,
+        isGoogleLinked: true,
+      });
+
+      return {
+        success: true,
+        message: `¡Cuenta vinculada con Google (${cred.user.email || username.value})!`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `No se pudo vincular con Google: ${err?.message || 'Operación cancelada'}`,
+      };
+    }
+  };
+
+  /**
+   * P0-1: Generate a Single-Use Recovery Code (`FC3D-XXXX-XXXX`).
+   * Unlike a raw UID, this token can only be redeemed ONCE (`used: false -> true`).
+   */
+  const generateSingleUseRecoveryCode = async (): Promise<{
+    success: boolean;
+    code?: string;
+    message: string;
+  }> => {
+    if (!userUid.value) {
+      return {
+        success: false,
+        message: 'Debes estar conectado para generar un código de recuperación de un solo uso.',
+      };
+    }
+
+    // 1. Primary path: Cloud Function `createRecoveryCode`
+    try {
+      const createFn = httpsCallable<void, { success: boolean; code: string }>(
+        functions,
+        'createRecoveryCode',
+      );
+      const res = await createFn();
+      if (res.data?.success && res.data.code) {
+        activeRecoveryCode.value = res.data.code;
+        setLocalSave({ lastRecoveryCode: res.data.code });
+        return {
+          success: true,
+          code: res.data.code,
+          message: 'Código de recuperación de un solo uso generado.',
+        };
+      }
+    } catch {
+      // Fallback to rule-checked `/recoveryCodes/{code}` creation
+    }
+
+    // 2. Fallback path: Create single-use document in `/recoveryCodes/{code}`
+    const code = generateRecoveryCodeFormat();
+    try {
+      await setDoc(doc(db, 'recoveryCodes', code), {
+        code,
+        ownerUid: userUid.value,
+        used: false,
+        snapshot: {
+          username: username.value || 'Jugador',
+          currentLevel: userCurrentLevel.value || 1,
+          highScore: userHighScore.value || 0,
+          coins: userCoins.value || 0,
+          activeSkin: activeSkin.value || 'default_fruits',
+          activeBackground: activeBackground.value || 'default_blue',
+          unlockedSkins: unlockedSkins.value || ['default_fruits'],
+          unlockedBackgrounds: unlockedBackgrounds.value || ['default_blue'],
+        },
+        createdAt: serverTimestamp(),
+      });
+
+      activeRecoveryCode.value = code;
+      setLocalSave({ lastRecoveryCode: code });
+      return {
+        success: true,
+        code,
+        message: 'Código de recuperación de 1 uso generado y activado.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `No se pudo generar el código: ${err?.message || err}`,
+      };
+    }
+  };
+
+  /**
+   * P0-1 Security Fix: Restore a player's progress ONLY via a Single-Use Recovery Code
+   * (`FC3D-XXXX-XXXX`). Rejects both public nicknames AND raw Firebase UIDs.
+   * Atomically marks `used: true` on the recovery code and writes the restored profile
+   * to both local storage and the current user's Firestore document (`/users/{userUid}`).
+   */
+  const restoreProfileByNicknameOrId = async (rawCode: string): Promise<{
     success: boolean;
     restoredLevel?: number;
     restoredCoins?: number;
@@ -624,68 +861,159 @@ export function useFirebase() {
     username?: string;
     message: string;
   }> => {
-    const clean = targetUid.trim();
-    if (!clean || clean.length < 20 || /\s/.test(clean)) {
+    const cleanCode = rawCode.trim().toUpperCase();
+    if (!isValidSingleUseRecoveryCode(cleanCode)) {
       return {
         success: false,
         message:
-          'Por seguridad, ya no se permite recuperar por apodo público. Ingresa tu Código de Recuperación privado (ID de 28 caracteres disponible en Ajustes).',
+          'Código inválido. Por seguridad solo se aceptan Códigos de Recuperación de 1 solo uso con formato FC3D-XXXX-XXXX (generados en Ajustes).',
       };
     }
 
+    // 1. Primary path: Cloud Function `redeemRecoveryCode`
     try {
-      const directDoc = await getDoc(doc(db, 'users', clean));
-      if (!directDoc.exists()) {
+      const redeemFn = httpsCallable<
+        { code: string },
+        {
+          success: boolean;
+          profile: {
+            username: string;
+            currentLevel: number;
+            highScore: number;
+            coins: number;
+            activeSkin: string;
+            activeBackground: string;
+            unlockedSkins: string[];
+            unlockedBackgrounds: string[];
+          };
+        }
+      >(functions, 'redeemRecoveryCode');
+      const res = await redeemFn({ code: cleanCode });
+      if (res.data?.success && res.data.profile) {
+        const p = res.data.profile;
+        userCurrentLevel.value = p.currentLevel;
+        userHighScore.value = p.highScore;
+        userCoins.value = p.coins;
+        username.value = p.username;
+        activeSkin.value = p.activeSkin;
+        activeBackground.value = p.activeBackground;
+        unlockedSkins.value = p.unlockedSkins;
+        unlockedBackgrounds.value = p.unlockedBackgrounds;
+
+        setLocalSave({
+          uid: userUid.value,
+          username: p.username,
+          highScore: p.highScore,
+          currentLevel: p.currentLevel,
+          coins: p.coins,
+          activeSkin: p.activeSkin,
+          activeBackground: p.activeBackground,
+          unlockedSkins: p.unlockedSkins,
+          unlockedBackgrounds: p.unlockedBackgrounds,
+          lastRecoveryCode: '',
+        });
+        activeRecoveryCode.value = '';
+
         return {
-          success: false,
-          message: 'No se encontró ninguna cuenta asociada a ese Código de Recuperación.',
+          success: true,
+          restoredLevel: p.currentLevel,
+          restoredCoins: p.coins,
+          restoredScore: p.highScore,
+          username: p.username,
+          message: `¡Código de 1 uso canjeado! Partida de ${p.username} (Nivel ${p.currentLevel}) restaurada y sincronizada en la nube.`,
         };
       }
+    } catch {
+      // Fallback to client Firestore transaction if Cloud Function is not reachable
+    }
 
-      const foundData = directDoc.data();
-      const restoredLevel = typeof foundData.currentLevel === 'number' ? foundData.currentLevel : 1;
-      const restoredScore = typeof foundData.highScore === 'number' ? foundData.highScore : 0;
-      const restoredCoins = typeof foundData.coins === 'number' ? foundData.coins : 0;
-      const restoredUsername = foundData.username || 'Jugador';
-      const restoredSkin = foundData.activeSkin || 'default_fruits';
-      const restoredBg = foundData.activeBackground || 'default_blue';
-      const restoredSkins = Array.isArray(foundData.unlockedSkins) ? foundData.unlockedSkins : ['default_fruits'];
-      const restoredBgs = Array.isArray(foundData.unlockedBackgrounds) ? foundData.unlockedBackgrounds : ['default_blue'];
+    // 2. Fallback path: Atomic Firestore transaction marking `used: true` and writing to `/users/{userUid}`
+    try {
+      const codeRef = doc(db, 'recoveryCodes', cleanCode);
 
-      userCurrentLevel.value = restoredLevel;
-      userHighScore.value = restoredScore;
-      userCoins.value = restoredCoins;
-      username.value = restoredUsername;
-      activeSkin.value = restoredSkin;
-      activeBackground.value = restoredBg;
-      unlockedSkins.value = restoredSkins;
-      unlockedBackgrounds.value = restoredBgs;
+      const snapshotData = await runTransaction(db, async tx => {
+        const codeSnap = await tx.get(codeRef);
+        if (!codeSnap.exists()) {
+          throw new Error('No existe ningún código de recuperación activo con ese identificador.');
+        }
+
+        const data = codeSnap.data();
+        if (data.used === true) {
+          throw new Error('Este código de recuperación de un solo uso ya fue utilizado anteriormente.');
+        }
+
+        const snap = data.snapshot || {};
+        const restoredProfile = {
+          username: snap.username || 'Jugador',
+          currentLevel: typeof snap.currentLevel === 'number' ? snap.currentLevel : 1,
+          highScore: typeof snap.highScore === 'number' ? snap.highScore : 0,
+          coins: typeof snap.coins === 'number' ? snap.coins : 0,
+          activeSkin: snap.activeSkin || 'default_fruits',
+          activeBackground: snap.activeBackground || 'default_blue',
+          unlockedSkins: Array.isArray(snap.unlockedSkins) ? snap.unlockedSkins : ['default_fruits'],
+          unlockedBackgrounds: Array.isArray(snap.unlockedBackgrounds)
+            ? snap.unlockedBackgrounds
+            : ['default_blue'],
+        };
+
+        tx.update(codeRef, {
+          used: true,
+          redeemedBy: userUid.value,
+          redeemedAt: serverTimestamp(),
+        });
+
+        if (userUid.value) {
+          const targetUserRef = doc(db, 'users', userUid.value);
+          tx.set(
+            targetUserRef,
+            {
+              ...restoredProfile,
+              restoredFromCode: cleanCode,
+              updatedAt: serverTimestamp(),
+              createdAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+
+        return restoredProfile;
+      });
+
+      userCurrentLevel.value = snapshotData.currentLevel;
+      userHighScore.value = snapshotData.highScore;
+      userCoins.value = snapshotData.coins;
+      username.value = snapshotData.username;
+      activeSkin.value = snapshotData.activeSkin;
+      activeBackground.value = snapshotData.activeBackground;
+      unlockedSkins.value = snapshotData.unlockedSkins;
+      unlockedBackgrounds.value = snapshotData.unlockedBackgrounds;
+      activeRecoveryCode.value = '';
 
       setLocalSave({
-        uid: userUid.value || directDoc.id,
-        username: restoredUsername,
-        highScore: restoredScore,
-        currentLevel: restoredLevel,
-        coins: restoredCoins,
-        activeSkin: restoredSkin,
-        activeBackground: restoredBg,
-        unlockedSkins: restoredSkins,
-        unlockedBackgrounds: restoredBgs,
+        uid: userUid.value,
+        username: snapshotData.username,
+        highScore: snapshotData.highScore,
+        currentLevel: snapshotData.currentLevel,
+        coins: snapshotData.coins,
+        activeSkin: snapshotData.activeSkin,
+        activeBackground: snapshotData.activeBackground,
+        unlockedSkins: snapshotData.unlockedSkins,
+        unlockedBackgrounds: snapshotData.unlockedBackgrounds,
+        lastRecoveryCode: '',
       });
 
       return {
         success: true,
-        restoredLevel,
-        restoredCoins,
-        restoredScore,
-        username: restoredUsername,
-        message: `¡Partida de ${restoredUsername} verificada y recuperada! Nivel ${restoredLevel} restaurado.`,
+        restoredLevel: snapshotData.currentLevel,
+        restoredCoins: snapshotData.coins,
+        restoredScore: snapshotData.highScore,
+        username: snapshotData.username,
+        message: `¡Código de 1 uso canjeado! Partida de ${snapshotData.username} (Nivel ${snapshotData.currentLevel}) restaurada y sincronizada en Firestore.`,
       };
     } catch (err: any) {
-      console.error('Error restaurando partida:', err);
       return {
         success: false,
-        message: `Error al verificar el código de recuperación: ${err.message || err}`,
+        message: err?.message || 'Error al canjear el código de recuperación de un solo uso.',
       };
     }
   };
@@ -699,6 +1027,8 @@ export function useFirebase() {
     userRank,
     isLeaderboardLoading,
     tutorialCompleted,
+    isGoogleLinked,
+    activeRecoveryCode,
 
     // Coins & Cosmetics
     userCoins,
@@ -715,13 +1045,16 @@ export function useFirebase() {
     authenticateAndLoadProfile,
     registerNewUser,
     markTutorialCompleted,
+    recordVerifiedLevelWin,
     saveProgress,
+    claimVerifiedMissionReward,
     updateUsername,
     fetchLeaderboard,
-    addCoins,
     spendCoins,
     purchaseItem,
     equipItem,
+    linkGoogleAccount,
+    generateSingleUseRecoveryCode,
     restoreProfileByNicknameOrId,
   };
 }

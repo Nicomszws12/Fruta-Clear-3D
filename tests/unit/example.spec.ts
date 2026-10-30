@@ -4,6 +4,7 @@ import {
   createBoardFromConfig,
   computeBlockedStatus,
   isBoardSolvable,
+  assignConstructiveSolvableTypes,
   shuffleTilePositions,
   findHintMatch,
 } from '@/game/boardEngine';
@@ -11,6 +12,11 @@ import { createInitialPowerUpState, performUndo } from '@/game/powerUps';
 import { getLevelConfig } from '@/game/levelConfig';
 import { getAvailableTypes } from '@/game/tileAssets';
 import { useGameState } from '@/composables/useGameState';
+import {
+  isValidSingleUseRecoveryCode,
+  generateRecoveryCodeFormat,
+  useFirebase,
+} from '@/composables/useFirebase';
 import type { Tile, MoveRecord } from '@/game/types';
 
 describe('Motor de Tablero 3D (boardEngine)', () => {
@@ -38,6 +44,21 @@ describe('Motor de Tablero 3D (boardEngine)', () => {
       expect(board.length % 3).toBe(0);
       expect(isBoardSolvable(board, [], 7)).toBe(true);
     }
+  });
+
+  test('assignConstructiveSolvableTypes revalida explícitamente con isBoardSolvable (P1-1)', () => {
+    const config = getLevelConfig(28);
+    const types = getAvailableTypes(config.tileTypeCount, 28);
+    const baseBoard = createBoardFromConfig(config, types);
+    const constructive = assignConstructiveSolvableTypes(
+      baseBoard,
+      baseBoard.map(t => t.type),
+      [],
+      7,
+    );
+
+    expect(constructive.length).toBe(baseBoard.length);
+    expect(isBoardSolvable(constructive, [], 7)).toBe(true);
   });
 
   test('computeBlockedStatus detecta bloqueo 3D por superposición de capas y libera al quitar la superior', () => {
@@ -84,7 +105,6 @@ describe('Motor de Tablero 3D (boardEngine)', () => {
     expect(evalTop.isBlocked).toBe(false);
     expect(evalFar.isBlocked).toBe(false);
 
-    // Al remover la ficha superior, la inferior queda libre
     const afterRemove = computeBlockedStatus(evaluated.filter(t => t.id !== 't-top'));
     expect(afterRemove.find(t => t.id === 't-bottom')!.isBlocked).toBe(false);
   });
@@ -114,13 +134,11 @@ describe('Motor de Tablero 3D (boardEngine)', () => {
       { id: 'tr2', type: 'lemon', gridX: 1, gridY: 1, z: 0, row: 1, col: 1, layerIndex: 0, isBlocked: false },
     ];
 
-    // Como ya hay 2 limones en la bandeja, la varita solo necesita traer 1 limón libre del tablero
     const hintWithTray = findHintMatch(board, tray, 7);
     expect(hintWithTray).not.toBeNull();
     expect(hintWithTray!.length).toBe(1);
     expect(hintWithTray![0].id).toBe('b1');
 
-    // Con bandeja vacía, la varita busca el trío completo de fresas
     const hintEmptyTray = findHintMatch(board, [], 7);
     expect(hintEmptyTray).not.toBeNull();
     expect(hintEmptyTray!.length).toBe(3);
@@ -181,6 +199,47 @@ describe('Power-Ups (powerUps)', () => {
   });
 });
 
+describe('Seguridad: Códigos de 1 Uso y Economía Verificada (P0-1, P0-2, P1-2)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test('isValidSingleUseRecoveryCode rechaza apodos y UIDs crudos, aceptando solo formato FC3D-XXXX-XXXX (P0-1)', () => {
+    const generated = generateRecoveryCodeFormat();
+    expect(isValidSingleUseRecoveryCode(generated)).toBe(true);
+    expect(isValidSingleUseRecoveryCode('JugadorPro123')).toBe(false);
+    expect(isValidSingleUseRecoveryCode('9xK7aP2mQ8vL4nR6tY1wZ3bC5dF8')).toBe(false);
+  });
+
+  test('restoreProfileByNicknameOrId bloquea restauración por apodo o UID de otra persona (P0-1)', async () => {
+    const fb = useFirebase();
+    const resNick = await fb.restoreProfileByNicknameOrId('Cecilia');
+    expect(resNick.success).toBe(false);
+
+    const resRawUid = await fb.restoreProfileByNicknameOrId('9xK7aP2mQ8vL4nR6tY1wZ3bC5dF8');
+    expect(resRawUid.success).toBe(false);
+  });
+
+  test('recordVerifiedLevelWin otorga +10 monedas en la primera victoria y 0 al rejugar niveles pasados (P0-2 / P1-2)', async () => {
+    const fb = useFirebase();
+    fb.userUid.value = '';
+    fb.userCurrentLevel.value = 1;
+    fb.userCoins.value = 0;
+
+    // Primera victoria del nivel 1 -> +10 monedas y avanza a nivel 2
+    const firstWin = await fb.recordVerifiedLevelWin(1, 450);
+    expect(firstWin.coinsGranted).toBe(10);
+    expect(fb.userCoins.value).toBe(10);
+    expect(fb.userCurrentLevel.value).toBe(2);
+
+    // Rejugar el nivel 1 desde el mapa -> 0 monedas (sin granja de monedas)
+    const replayWin = await fb.recordVerifiedLevelWin(1, 500);
+    expect(replayWin.coinsGranted).toBe(0);
+    expect(fb.userCoins.value).toBe(10);
+    expect(fb.userCurrentLevel.value).toBe(2);
+  });
+});
+
 describe('Deadlock de Bandeja y Estado de Juego (useGameState)', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -230,4 +289,3 @@ describe('Deadlock de Bandeja y Estado de Juego (useGameState)', () => {
     expect(newSession.tray.value.length).toBe(1);
   });
 });
-

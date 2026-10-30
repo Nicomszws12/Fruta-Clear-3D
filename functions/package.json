@@ -1,0 +1,23 @@
+{
+  "name": "fruta-clear-3d-functions",
+  "version": "1.1.0",
+  "description": "Server-side economy, victory verification, daily missions, and single-use recovery codes for Fruta Clear 3D",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.0"
+  },
+  "private": true
+}
+

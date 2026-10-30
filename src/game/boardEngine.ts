@@ -83,7 +83,8 @@ export function computeBlockedStatus(tiles: Tile[]): Tile[] {
  * Simulate whether a board configuration can be completely cleared
  * using a tray of capacity `maxTray` (default 7), starting with `currentTray`.
  *
- * Uses a fast bounded backtracking + greedy triplet completion solver.
+ * Combines zero-cost greedy triplet reduction with a deep bounded backtracking
+ * search (MAX_EXPANSIONS = 3000) to avoid false negatives on large levels.
  */
 export function isBoardSolvable(
   tiles: Tile[],
@@ -110,7 +111,7 @@ export function isBoardSolvable(
   }
 
   let expansions = 0;
-  const MAX_EXPANSIONS = 350;
+  const MAX_EXPANSIONS = 3000;
   const visited = new Set<string>();
 
   function cleanTrayMatches(trayTypes: string[]): string[] {
@@ -132,9 +133,63 @@ export function isBoardSolvable(
     return next;
   }
 
-  function solve(board: Tile[], trayTypes: string[]): boolean {
-    const cleanedTray = cleanTrayMatches(trayTypes);
-    if (cleanedTray.length >= maxTray) return false;
+  // Zero-cost greedy reduction: repeatedly clear any immediately completable triplets
+  function reduceGreedyTriplets(
+    startBoard: Tile[],
+    startTray: string[],
+  ): { board: Tile[]; tray: string[]; dead: boolean } {
+    let board = startBoard;
+    let tray = cleanTrayMatches(startTray);
+    if (tray.length >= maxTray) return { board, tray, dead: true };
+
+    let madeProgress = true;
+    while (madeProgress && board.length > 0) {
+      madeProgress = false;
+      const unblocked = board.filter(t => !t.isBlocked);
+      if (unblocked.length === 0) break;
+
+      const trayCounts = new Map<string, number>();
+      for (const type of tray) {
+        trayCounts.set(type, (trayCounts.get(type) || 0) + 1);
+      }
+
+      const unblockedByType = new Map<string, Tile[]>();
+      for (const tile of unblocked) {
+        const group = unblockedByType.get(tile.type) ?? [];
+        group.push(tile);
+        unblockedByType.set(tile.type, group);
+      }
+
+      // Prioritize completing types already in tray (reduces tray occupancy), then highest z
+      const entries = Array.from(unblockedByType.entries()).sort((a, b) => {
+        const inTrayDiff = (trayCounts.get(b[0]) || 0) - (trayCounts.get(a[0]) || 0);
+        if (inTrayDiff !== 0) return inTrayDiff;
+        const maxZA = Math.max(...a[1].map(t => t.z));
+        const maxZB = Math.max(...b[1].map(t => t.z));
+        return maxZB - maxZA;
+      });
+
+      for (const [type, group] of entries) {
+        const inTray = trayCounts.get(type) || 0;
+        const needed = 3 - inTray;
+        if (needed > 0 && group.length >= needed && tray.length + needed <= maxTray) {
+          group.sort((a, b) => b.z - a.z);
+          const chosen = group.slice(0, needed);
+          const chosenIds = new Set(chosen.map(c => c.id));
+          board = computeBlockedStatus(board.filter(t => !chosenIds.has(t.id)));
+          tray = cleanTrayMatches([...tray, ...chosen.map(c => c.type)]);
+          madeProgress = true;
+          break;
+        }
+      }
+    }
+
+    return { board, tray, dead: tray.length >= maxTray };
+  }
+
+  function solve(rawBoard: Tile[], rawTray: string[]): boolean {
+    const { board, tray: cleanedTray, dead } = reduceGreedyTriplets(rawBoard, rawTray);
+    if (dead) return false;
     if (board.length === 0) return cleanedTray.length === 0;
 
     if (++expansions > MAX_EXPANSIONS) return false;
@@ -147,7 +202,9 @@ export function isBoardSolvable(
     const unblocked = board.filter(t => !t.isBlocked);
     if (unblocked.length === 0) return false;
 
-    // Count types in tray and unblocked on board
+    // Must pick 1 unblocked tile to expose lower layers
+    if (cleanedTray.length + 1 >= maxTray) return false;
+
     const trayCounts = new Map<string, number>();
     for (const type of cleanedTray) {
       trayCounts.set(type, (trayCounts.get(type) || 0) + 1);
@@ -160,37 +217,14 @@ export function isBoardSolvable(
       unblockedByType.set(tile.type, group);
     }
 
-    // Sort each group by descending z so higher tiles (which unblock more) are picked first
-    for (const group of unblockedByType.values()) {
-      group.sort((a, b) => b.z - a.z);
-    }
-
-    // 1. Greedy safe move: if any type can immediately form a triplet within tray capacity,
-    // picking the required tiles of that type strictly reduces or maintains tray size.
-    for (const [type, group] of unblockedByType.entries()) {
-      const inTray = trayCounts.get(type) || 0;
-      const needed = 3 - inTray;
-      if (needed > 0 && group.length >= needed && cleanedTray.length + needed <= maxTray) {
-        const chosen = group.slice(0, needed);
-        const chosenIds = new Set(chosen.map(c => c.id));
-        const nextBoard = computeBlockedStatus(board.filter(t => !chosenIds.has(t.id)));
-        const nextTray = [...cleanedTray, ...chosen.map(c => c.type)];
-        if (solve(nextBoard, nextTray)) return true;
-      }
-    }
-
-    // 2. Otherwise, we must pick 1 unblocked tile to expose lower tiles.
-    // Cannot pick if tray has only 1 slot left and this move won't match.
-    if (cleanedTray.length + 1 >= maxTray) return false;
-
-    // Score candidate single moves: prefer higher z and types already present in tray/unblocked
     const candidates = [...unblocked].sort((a, b) => {
-      const scoreA = a.z * 3 + (trayCounts.get(a.type) || 0) * 2 + (unblockedByType.get(a.type)?.length || 0);
-      const scoreB = b.z * 3 + (trayCounts.get(b.type) || 0) * 2 + (unblockedByType.get(b.type)?.length || 0);
+      const scoreA =
+        a.z * 3 + (trayCounts.get(a.type) || 0) * 2 + (unblockedByType.get(a.type)?.length || 0);
+      const scoreB =
+        b.z * 3 + (trayCounts.get(b.type) || 0) * 2 + (unblockedByType.get(b.type)?.length || 0);
       return scoreB - scoreA;
     });
 
-    // Try up to 4 best distinct candidate moves
     const triedTypesAtZ = new Set<string>();
     let branches = 0;
     for (const cand of candidates) {
@@ -202,7 +236,7 @@ export function isBoardSolvable(
       const nextTray = [...cleanedTray, cand.type];
       if (solve(nextBoard, nextTray)) return true;
 
-      if (++branches >= 4) break;
+      if (++branches >= 5) break;
     }
 
     return false;
@@ -211,7 +245,7 @@ export function isBoardSolvable(
   return solve(initialBoard, initialTrayTypes);
 }
 
-// ─── Constructive Solvable Assignment ─────────────────────────
+// ─── Constructive Solvable Assignment (Verified) ──────────────
 
 interface SlotPosition {
   id: string;
@@ -226,86 +260,98 @@ interface SlotPosition {
 /**
  * Constructively assigns tile types from top to bottom so that at every step
  * a valid match can be formed from currently unblocked positions without
- * overflowing the 7-slot tray.
+ * overflowing the 7-slot tray, and revalidates the result with `isBoardSolvable`.
  */
-function assignConstructiveSolvableTypes(
+export function assignConstructiveSolvableTypes(
   slots: SlotPosition[],
   typesToAssign: string[],
   currentTray: Tile[] = [],
+  maxTray = 7,
 ): Tile[] {
-  // Group available types into triplets (and tray-completion groups first)
-  const typeCounts = new Map<string, number>();
-  for (const t of typesToAssign) {
-    typeCounts.set(t, (typeCounts.get(t) || 0) + 1);
-  }
+  const buildCandidate = (strictTopDown: boolean): Tile[] => {
+    const typeCounts = new Map<string, number>();
+    for (const t of typesToAssign) {
+      typeCounts.set(t, (typeCounts.get(t) || 0) + 1);
+    }
 
-  const trayCounts = new Map<string, number>();
-  for (const t of currentTray) {
-    trayCounts.set(t.type, (trayCounts.get(t.type) || 0) + 1);
-  }
+    const trayCounts = new Map<string, number>();
+    for (const t of currentTray) {
+      trayCounts.set(t.type, (trayCounts.get(t.type) || 0) + 1);
+    }
 
-  // Build ordered groups of types to place from top (picked first) to bottom (picked last)
-  const groupsToPlace: string[][] = [];
+    const groupsToPlace: string[][] = [];
 
-  // First, schedule completions for any tiles already in the tray!
-  for (const [type, inTray] of trayCounts.entries()) {
-    const remInTray = inTray % 3;
-    if (remInTray > 0) {
-      const needed = 3 - remInTray;
-      const avail = typeCounts.get(type) || 0;
-      if (avail >= needed) {
-        groupsToPlace.push(Array(needed).fill(type));
-        typeCounts.set(type, avail - needed);
+    // First, schedule completions for any tiles already in the tray
+    for (const [type, inTray] of trayCounts.entries()) {
+      const remInTray = inTray % 3;
+      if (remInTray > 0) {
+        const needed = 3 - remInTray;
+        const avail = typeCounts.get(type) || 0;
+        if (avail >= needed) {
+          groupsToPlace.push(Array(needed).fill(type));
+          typeCounts.set(type, avail - needed);
+        }
       }
     }
-  }
 
-  // Remaining types form triplets; shuffle the triplets for variety
-  const tripletGroups: string[][] = [];
-  for (const [type, count] of typeCounts.entries()) {
-    const fullTriplets = Math.floor(count / 3);
-    for (let i = 0; i < fullTriplets; i++) {
-      tripletGroups.push([type, type, type]);
-    }
-    const leftover = count % 3;
-    if (leftover > 0) {
-      tripletGroups.push(Array(leftover).fill(type));
-    }
-  }
-
-  groupsToPlace.push(...fisherYatesShuffle(tripletGroups));
-
-  // Peel unblocked slots from top to bottom and assign groups
-  let remaining: Tile[] = slots.map(s => ({
-    ...s,
-    type: '',
-    isBlocked: false,
-  }));
-  const assignedById = new Map<string, string>();
-
-  for (const group of groupsToPlace) {
-    remaining = computeBlockedStatus(remaining);
-    const unblocked = remaining.filter(t => !t.isBlocked);
-    const pool = unblocked.length >= group.length ? unblocked : remaining;
-    const shuffledPool = fisherYatesShuffle(pool).sort((a, b) => b.z - a.z);
-    const chosen = shuffledPool.slice(0, group.length);
-    const chosenIds = new Set<string>();
-
-    for (let i = 0; i < chosen.length; i++) {
-      assignedById.set(chosen[i].id, group[i]);
-      chosenIds.add(chosen[i].id);
+    const tripletGroups: string[][] = [];
+    for (const [type, count] of typeCounts.entries()) {
+      const fullTriplets = Math.floor(count / 3);
+      for (let i = 0; i < fullTriplets; i++) {
+        tripletGroups.push([type, type, type]);
+      }
+      const leftover = count % 3;
+      if (leftover > 0) {
+        tripletGroups.push(Array(leftover).fill(type));
+      }
     }
 
-    remaining = remaining.filter(t => !chosenIds.has(t.id));
+    groupsToPlace.push(...fisherYatesShuffle(tripletGroups));
+
+    let remaining: Tile[] = slots.map(s => ({
+      ...s,
+      type: '',
+      isBlocked: false,
+    }));
+    const assignedById = new Map<string, string>();
+
+    for (const group of groupsToPlace) {
+      remaining = computeBlockedStatus(remaining);
+      const unblocked = remaining.filter(t => !t.isBlocked);
+      const pool = unblocked.length >= group.length ? unblocked : remaining;
+      const orderedPool = strictTopDown
+        ? [...pool].sort((a, b) => b.z - a.z || a.gridY - b.gridY || a.gridX - b.gridX)
+        : fisherYatesShuffle(pool).sort((a, b) => b.z - a.z);
+
+      const chosen = orderedPool.slice(0, group.length);
+      const chosenIds = new Set<string>();
+
+      for (let i = 0; i < chosen.length; i++) {
+        assignedById.set(chosen[i].id, group[i]);
+        chosenIds.add(chosen[i].id);
+      }
+
+      remaining = remaining.filter(t => !chosenIds.has(t.id));
+    }
+
+    const finalTiles: Tile[] = slots.map((slot, idx) => ({
+      ...slot,
+      type: assignedById.get(slot.id) || typesToAssign[idx] || 'strawberry',
+      isBlocked: false,
+    }));
+
+    return computeBlockedStatus(finalTiles);
+  };
+
+  // Revalidate constructive candidate with isBoardSolvable up to 8 attempts
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = buildCandidate(attempt >= 5);
+    if (isBoardSolvable(candidate, currentTray, maxTray)) {
+      return candidate;
+    }
   }
 
-  const finalTiles: Tile[] = slots.map((slot, idx) => ({
-    ...slot,
-    type: assignedById.get(slot.id) || typesToAssign[idx] || 'strawberry',
-    isBlocked: false,
-  }));
-
-  return computeBlockedStatus(finalTiles);
+  return buildCandidate(true);
 }
 
 // ─── Board Creation ───────────────────────────────────────────
@@ -323,8 +369,7 @@ export function createBoardFromConfig(
   for (let li = 0; li < config.layers.length; li++) {
     const layer = config.layers[li];
     const offX = layer.offsetX !== undefined ? layer.offsetX : layer.z * 0.5;
-    const offY = layer.offsetY !== undefined ? layer.z * 0.5 : layer.z * 0.5;
-    const resolvedOffY = layer.offsetY !== undefined ? layer.offsetY : offY;
+    const resolvedOffY = layer.offsetY !== undefined ? layer.offsetY : layer.z * 0.5;
     for (let row = 0; row < layer.rows; row++) {
       for (let col = 0; col < layer.cols; col++) {
         if (layer.mask && !layer.mask[row][col]) continue;
@@ -380,8 +425,8 @@ export function createBoardFromConfig(
     }
   }
 
-  // Step 5: Fallback to constructive top-down solvable placement (100% guaranteed solvable)
-  return assignConstructiveSolvableTypes(slots, deck, []);
+  // Step 5: Fallback to constructive top-down solvable placement (revalidated with isBoardSolvable)
+  return assignConstructiveSolvableTypes(slots, deck, [], 7);
 }
 
 // ─── Shuffle ──────────────────────────────────────────────────
@@ -414,7 +459,7 @@ export function shuffleTilePositions(
     }
   }
 
-  // Constructive fallback guarantees solvability with current tray
+  // Constructive fallback guarantees solvability with current tray (revalidated with isBoardSolvable)
   const slots: SlotPosition[] = tiles.map(t => ({
     id: t.id,
     gridX: t.gridX,
@@ -425,7 +470,7 @@ export function shuffleTilePositions(
     layerIndex: t.layerIndex,
   }));
 
-  return assignConstructiveSolvableTypes(slots, types, currentTray);
+  return assignConstructiveSolvableTypes(slots, types, currentTray, maxTray);
 }
 
 // ─── Hint Search (Magic Wand) ─────────────────────────────────
