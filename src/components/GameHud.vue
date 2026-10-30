@@ -67,7 +67,10 @@ const formatScore = (num: number) => {
           :aria-label="`Nivel ${level}, ${worldName}. Progreso ${clearedTiles} de ${totalLevelTiles} fichas. Abrir mapa de mundos`"
         >
           <div class="level-top-row">
-            <span class="level-badge">⭐ Nv. {{ level }}</span>
+            <span class="level-badge">
+              <img src="/assets/ui/Yellow/Double/star.png" alt="" class="level-star" />
+              Nv. {{ level }}
+            </span>
             <span class="progress-count">{{ clearedTiles }}/{{ totalLevelTiles }}</span>
           </div>
           <div class="level-progress-track" aria-hidden="true">
@@ -86,7 +89,10 @@ const formatScore = (num: number) => {
           title="Pausa y Menú"
           aria-label="Pausar partida"
         >
-          <span class="pause-icon" aria-hidden="true">⏸️</span>
+          <span class="pause-icon" aria-hidden="true">
+            <span class="pause-bar"></span>
+            <span class="pause-bar"></span>
+          </span>
           <span
             v-if="unclaimedMissionsCount > 0"
             class="hud-notif-dot"
@@ -226,6 +232,14 @@ const formatScore = (num: number) => {
   font-weight: 900;
   color: #0369a1;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.level-star {
+  width: 14px;
+  height: 14px;
 }
 
 .progress-count {
@@ -251,34 +265,42 @@ const formatScore = (num: number) => {
   transition: width 0.25s ease;
 }
 
-/* 4. Pause & Menu Hub Button (44x44px minimum touch area) */
+/* 4. Pause & Menu Hub Button (44x44px minimum touch area, Kenney texture) */
 .hud-pause-btn {
   position: relative;
   width: 44px;
   height: 44px;
   min-width: 44px;
   min-height: 44px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #a855f7 0%, #7c3aed 100%);
-  border: 2px solid #5b21b6;
-  box-shadow: 0 3px 0 #4c1d95;
+  border-radius: 12px;
+  background: url('/assets/ui/Blue/Double/button_square_depth_gloss.png') center / 100% 100% no-repeat;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  padding: 0;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  padding: 0 0 4px;
+  transition: transform 0.1s ease, filter 0.1s ease;
 }
 
 .hud-pause-btn:active {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 #4c1d95;
+  filter: brightness(0.94);
 }
 
 .pause-icon {
-  font-size: 18px;
+  display: flex;
+  gap: 4px;
   line-height: 1;
+}
+
+.pause-bar {
+  width: 5px;
+  height: 16px;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
 .hud-notif-dot {

@@ -9,6 +9,8 @@ const props = defineProps<{
   isTrayCritical: boolean;
   matchingTileIds?: Set<string>;
   isTrayFullError?: boolean;
+  /** Ola 3: why the round was lost (changes the tray label copy) */
+  loseReason?: 'tray_full' | 'deadlock';
 }>();
 
 interface ResolvedTrayTile {
@@ -52,7 +54,10 @@ const isLastSlotLeft = computed(() => props.tray.length === props.maxTray - 1);
     role="region"
     :aria-label="`Bandeja de fichas: ${tray.length} de ${maxTray} espacios ocupados`"
   >
-    <div class="tray-warning-label" v-if="isTrayFullError" role="status">
+    <div class="tray-warning-label" v-if="isTrayFullError && loseReason === 'deadlock'" role="status">
+      🧩 ¡Sin jugadas! No quedan fichas para completar tríos
+    </div>
+    <div class="tray-warning-label" v-else-if="isTrayFullError" role="status">
       💥 ¡Bandeja llena! ({{ maxTray }}/{{ maxTray }})
     </div>
     <div class="tray-warning-label" v-else-if="isLastSlotLeft" role="status">
@@ -66,6 +71,7 @@ const isLastSlotLeft = computed(() => props.tray.length === props.maxTray - 1);
       <div
         v-for="{ tile, asset, isMatching, isPairReady } in resolvedTray"
         :key="'tray-' + tile.id"
+        :data-tray-tile-id="tile.id"
         class="tray-slot tray-tile is-filled"
         :class="{
           'is-matching': isMatching,
@@ -289,17 +295,16 @@ const isLastSlotLeft = computed(() => props.tray.length === props.maxTray - 1);
   opacity: 0.6;
 }
 
+/* #2 The tile arrives via the flight clone, so the slot only "lands" (squash) */
 @keyframes trayBounceIn {
   0% {
-    transform: scale(0.2) rotate(-10deg);
-    opacity: 0;
+    transform: scale(1.08);
   }
-  70% {
-    transform: scale(1.18) rotate(3deg);
+  55% {
+    transform: scale(0.92, 0.96);
   }
   100% {
-    transform: scale(1) rotate(0);
-    opacity: 1;
+    transform: scale(1);
   }
 }
 

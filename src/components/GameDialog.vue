@@ -139,12 +139,25 @@
               </div>
 
               <div class="card-title">
-                <h2>¡BANDEJA LLENA!</h2>
+                <h2>{{ loseReason === 'deadlock' ? '¡SIN JUGADAS!' : '¡BANDEJA LLENA!' }}</h2>
               </div>
 
               <div class="inner-box red-border">
                 <span class="box-subtitle">FIN DE LA PARTIDA</span>
-                <p class="lose-desc">Te has quedado sin espacio para más fichas.</p>
+                <p class="lose-desc">
+                  {{
+                    loseReason === 'deadlock'
+                      ? 'El tablero quedó vacío y en tu bandeja no hay fichas para completar un trío.'
+                      : 'Te has quedado sin espacio para más fichas.'
+                  }}
+                </p>
+                <p class="lose-tip">
+                  {{
+                    loseReason === 'deadlock'
+                      ? '💡 Antes de tomar la última ficha de un tipo, revisa que puedas juntar 3.'
+                      : '💡 Cuando la bandeja se ponga roja, usa Deshacer o la Varita Mágica.'
+                  }}
+                </p>
                 <div class="lose-score-chip" v-if="score !== undefined">
                   <span class="chip-label">Puntaje de Sesión</span>
                   <span class="chip-val">{{ formatScore(score) }} PTS</span>
@@ -181,14 +194,15 @@
                 <p class="lose-desc">Tu tablero y bandeja están guardados de forma segura.</p>
 
                 <button type="button" class="pause-menu-btn btn-resume" @click="$emit('resume')">
-                  ▶️ CONTINUAR PARTIDA
+                  <img src="/assets/ui/Extra/Double/icon_play_light.png" alt="" class="sub-icon-img" />
+                  CONTINUAR PARTIDA
                 </button>
 
-                <!-- 2x2 Navigation Grid (>= 48px touch targets) -->
+                <!-- 2x2 Navigation Grid (>= 48px touch targets, Kenney textured) -->
                 <div class="pause-hub-grid">
                   <button
                     type="button"
-                    class="pause-hub-btn hub-missions"
+                    class="pause-hub-btn hub-missions kenney-tex"
                     aria-label="Misiones diarias"
                     @click="$emit('open-missions')"
                   >
@@ -201,7 +215,7 @@
 
                   <button
                     type="button"
-                    class="pause-hub-btn hub-map"
+                    class="pause-hub-btn hub-map kenney-tex"
                     aria-label="Abrir mapa de mundos"
                     @click="$emit('open-map')"
                   >
@@ -211,7 +225,7 @@
 
                   <button
                     type="button"
-                    class="pause-hub-btn hub-shop"
+                    class="pause-hub-btn hub-shop kenney-tex"
                     aria-label="Abrir tienda"
                     @click="$emit('open-shop')"
                   >
@@ -221,7 +235,7 @@
 
                   <button
                     type="button"
-                    class="pause-hub-btn hub-leaderboard"
+                    class="pause-hub-btn hub-leaderboard kenney-tex"
                     aria-label="Tabla de clasificación"
                     @click="$emit('open-leaderboard')"
                   >
@@ -234,11 +248,20 @@
                 <div class="pause-secondary-row">
                   <button
                     type="button"
+                    class="pause-sub-btn sub-home"
+                    aria-label="Volver a la pantalla de inicio"
+                    @click="$emit('open-home')"
+                  >
+                    🏠 Inicio
+                  </button>
+                  <button
+                    type="button"
                     class="pause-sub-btn sub-restart"
                     aria-label="Reiniciar nivel"
                     @click="$emit('retry')"
                   >
-                    🔄 Reiniciar
+                    <img src="/assets/ui/Extra/Double/icon_repeat_dark.png" alt="" class="sub-icon-img" />
+                    Reiniciar
                   </button>
                   <button
                     type="button"
@@ -315,6 +338,7 @@ const props = defineProps<{
   coinsEarned?: number;
   starsBreakdown?: LevelStarsBreakdown;
   unclaimedMissionsCount?: number;
+  loseReason?: 'tray_full' | 'deadlock';
 }>();
 
 const emit = defineEmits<{
@@ -322,6 +346,7 @@ const emit = defineEmits<{
   (e: 'next'): void;
   (e: 'retry'): void;
   (e: 'resume'): void;
+  (e: 'open-home'): void;
   (e: 'open-tutorial'): void;
   (e: 'open-map'): void;
   (e: 'open-missions'): void;
@@ -770,6 +795,39 @@ const getConfettiStyle = (index: number) => {
   box-shadow: 0 3px 0 #047857;
 }
 
+/* Ola 3: Kenney UI Pack textures on hub buttons (falls back to flat colors above) */
+.pause-hub-btn.kenney-tex {
+  border: none;
+  box-shadow: none;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  padding-bottom: 12px;
+  min-height: 56px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.hub-missions.kenney-tex { background-image: url('/assets/ui/Red/Double/button_rectangle_depth_gloss.png'); }
+.hub-map.kenney-tex { background-image: url('/assets/ui/Blue/Double/button_rectangle_depth_gloss.png'); }
+.hub-shop.kenney-tex { background-image: url('/assets/ui/Yellow/Double/button_rectangle_depth_gloss.png'); }
+.hub-leaderboard.kenney-tex { background-image: url('/assets/ui/Green/Double/button_rectangle_depth_gloss.png'); }
+
+.sub-icon-img {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+}
+
+.lose-tip {
+  font-size: 11px;
+  font-weight: 700;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin: 0 0 10px;
+}
+
 .hub-badge {
   position: absolute;
   top: -5px;
@@ -789,11 +847,12 @@ const getConfettiStyle = (index: number) => {
 
 .pause-secondary-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .pause-sub-btn {
-  flex: 1;
+  flex: 1 1 calc(50% - 6px);
   min-height: 44px;
   border-radius: 12px;
   font-family: var(--game-font-narrow, sans-serif);

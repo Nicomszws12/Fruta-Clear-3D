@@ -35,6 +35,7 @@ const props = defineProps<{
   lastLevelStars: LevelStarsBreakdown;
   levelStarsMap: Record<number, number>;
   lastCoinsEarned: number;
+  loseReason?: 'tray_full' | 'deadlock';
   unclaimedMissionsCount: number;
   username: string;
   userUid: string;
@@ -75,6 +76,7 @@ const emit = defineEmits<{
   (e: 'next-level'): void;
   (e: 'retry-level'): void;
   (e: 'resume-pause'): void;
+  (e: 'open-home'): void;
   (e: 'open-tutorial'): void;
   (e: 'open-map-from-pause'): void;
   (e: 'open-missions-from-pause'): void;
@@ -220,6 +222,7 @@ const promptRestoreProgressFromSettings = async () => {
     variant="lose"
     :level="level"
     :score="score"
+    :lose-reason="loseReason"
     @retry="emit('retry-level')"
   />
 
@@ -230,6 +233,7 @@ const promptRestoreProgressFromSettings = async () => {
     :score="score"
     :unclaimed-missions-count="unclaimedMissionsCount"
     @resume="emit('resume-pause')"
+    @open-home="emit('open-home')"
     @retry="emit('retry-level')"
     @open-tutorial="emit('open-tutorial')"
     @open-map="emit('open-map-from-pause')"

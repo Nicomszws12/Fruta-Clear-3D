@@ -9,7 +9,7 @@ import {
   findHintMatch,
 } from '@/game/boardEngine';
 import { createInitialPowerUpState, performUndo } from '@/game/powerUps';
-import { getLevelConfig } from '@/game/levelConfig';
+import { getLevelConfig, getWorldAccent } from '@/game/levelConfig';
 import { getAvailableTypes } from '@/game/tileAssets';
 import { useGameState } from '@/composables/useGameState';
 import {
@@ -322,5 +322,70 @@ describe('Deadlock de Bandeja y Estado de Juego (useGameState)', () => {
     expect(game.matchingTileIds.value.has('m1')).toBe(true);
     expect(game.matchingTileIds.value.has('m2')).toBe(true);
     expect(game.matchingTileIds.value.has('m3')).toBe(true);
+    // Ola 3: También dispara el evento de partículas de match con las 3 fichas
+    expect(game.matchBurst.value).not.toBeNull();
+    expect(game.matchBurst.value?.type).toBe('strawberry');
+    expect(game.matchBurst.value?.tileIds).toEqual(['m1', 'm2', 'm3']);
+  });
+
+  test('anima el vuelo de la ficha a la bandeja (#2) bloqueando toques con isAnimating', async () => {
+    const game = useGameState();
+    game.boardTiles.value = [
+      { id: 'f1', type: 'lemon', gridX: 0, gridY: 0, z: 0, row: 0, col: 0, layerIndex: 0, isBlocked: false },
+      { id: 'f2', type: 'apple', gridX: 1, gridY: 0, z: 0, row: 0, col: 1, layerIndex: 0, isBlocked: false },
+    ];
+    game.tray.value = [];
+    game.gameStatus.value = 'playing';
+
+    let resolveFlight: (() => void) | null = null;
+    let capturedSlot = -1;
+    game.setTileFlightAnimator((_tile, targetSlotIndex) => {
+      capturedSlot = targetSlotIndex;
+      return new Promise<void>(res => {
+        resolveFlight = res;
+      });
+    });
+
+    const flightPromise = game.selectTile(game.boardTiles.value[0]);
+    expect(game.isAnimating.value).toBe(true);
+    expect(game.flyingTileId.value).toBe('f1');
+    // Aún no entra a la bandeja mientras vuela
+    expect(game.tray.value.length).toBe(0);
+
+    // Un segundo toque durante el vuelo se ignora por isAnimating
+    game.selectTile(game.boardTiles.value[1]);
+    expect(game.boardTiles.value.length).toBe(2);
+
+    resolveFlight!();
+    await flightPromise;
+
+    expect(capturedSlot).toBe(0);
+    expect(game.isAnimating.value).toBe(false);
+    expect(game.flyingTileId.value).toBeNull();
+    expect(game.tray.value.length).toBe(1);
+    expect(game.tray.value[0].id).toBe('f1');
+  });
+
+  test('distingue motivo de derrota: tray_full vs deadlock sin jugadas (Ola 3)', () => {
+    const game = useGameState();
+    // Tablero con solo 2 fichas sin trío posible: al vaciar el tablero queda en deadlock
+    game.boardTiles.value = [
+      { id: 'd1', type: 'strawberry', gridX: 0, gridY: 0, z: 0, row: 0, col: 0, layerIndex: 0, isBlocked: false },
+      { id: 'd2', type: 'lemon', gridX: 1, gridY: 0, z: 0, row: 0, col: 1, layerIndex: 0, isBlocked: false },
+    ];
+    game.tray.value = [];
+    game.gameStatus.value = 'playing';
+
+    game.selectTile(game.boardTiles.value[0]);
+    game.selectTile(game.boardTiles.value[0]);
+
+    expect(game.gameStatus.value).toBe('lost');
+    expect(game.loseReason.value).toBe('deadlock');
+  });
+
+  test('asigna color de acento del tapete según el mundo (Ola 3)', () => {
+    expect(getWorldAccent(1)).toBe('#16a34a'); // Huerto Soleado -> verde
+    expect(getWorldAccent(3)).toBe('#059669'); // Cueva Esmeralda -> esmeralda
+    expect(getWorldAccent(7)).toBe('#ea580c'); // Isla Volcánica -> naranja
   });
 });

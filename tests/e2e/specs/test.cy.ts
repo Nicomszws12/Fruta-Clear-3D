@@ -19,8 +19,13 @@ describe('Fruta Clear 3D — Flujo Completo de Partida E2E (P1-4 + Mejoras UX #1
     });
   });
 
-  it('Completa el flujo de partida: intro 1.5s, HUD limpio, selección al tray, deshacer, varita y Hub de Pausa', () => {
+  it('Completa el flujo de partida: Hub de inicio (Ola 2), intro 1.5s, HUD limpio, vuelo al tray, deshacer, varita y Hub de Pausa', () => {
     cy.visit('/');
+
+    // 0. Verifica la Pantalla de Inicio (Ola 2 Hub) y pulsa Continuar para entrar al tablero
+    cy.get('[aria-label="Pantalla de inicio de Fruta Clear 3D"]').should('be.visible');
+    cy.contains('.logo-title', 'FRUTA').should('be.visible');
+    cy.get('.title-cta').should('not.be.disabled').click();
 
     // 1. Verifica HUD limpio (4 controles táctiles >=44px), tablero 3D, power-ups y bandeja de 7 casillas
     cy.get('.game-hud-toolbar').should('be.visible');

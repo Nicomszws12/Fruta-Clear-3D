@@ -7,6 +7,8 @@
  * - Critical Tray heartbeat + haptic warning + full-tray fail state
  * - 3-Star rating per level (no critical tray / no power-ups spent / combo x2+)
  * - 1.5s Level & World Intro banner
+ * - Tile flight to tray (injected UI animator, input locked via isAnimating)
+ * - Distinct lose reasons (tray full vs. no moves left) & match particle bursts
  * - Mid-level board persistence (LocalStorage + Capacitor Preferences)
  * - Pause/resume state that preserves active combo windows
  */
@@ -61,6 +63,16 @@ export interface LevelStarsBreakdown {
   noPowerUpsUsed: boolean;
   reachedCombo2: boolean;
 }
+
+export type LoseReason = 'tray_full' | 'deadlock';
+
+export interface MatchBurst {
+  id: number;
+  type: string;
+  tileIds: string[];
+}
+
+export type TileFlightAnimator = (tile: Tile, targetSlotIndex: number) => Promise<void>;
 
 export interface LevelIntroInfo {
   id: number;
@@ -142,6 +154,11 @@ export function useGameState() {
   const wigglingTileId = ref<string | null>(null);
   const isAnimating = ref(false);
   const isTrayFullError = ref(false);
+  const loseReason = ref<LoseReason>('tray_full');
+  const flyingTileId = ref<string | null>(null);
+  const matchBurst = ref<MatchBurst | null>(null);
+  /** Incremented on every board (re)generation/restore to invalidate in-flight animations */
+  let boardVersion = 0;
 
   // ─── 3-Star Tracking & Level Intro (#3 & #4) ────────────────
   const hadCriticalTray = ref(false);
@@ -292,6 +309,9 @@ export function useGameState() {
       }
 
       level.value = parsed.level;
+      boardVersion++;
+      flyingTileId.value = null;
+      loseReason.value = 'tray_full';
       score.value = parsed.sessionScore || 0;
       boardTiles.value = computeBlockedStatus(parsed.boardTiles);
       tray.value = parsed.tray;
@@ -336,6 +356,9 @@ export function useGameState() {
   // ─── Board Generation ──────────────────────────────────────
   const generateBoard = (showIntro = true) => {
     const config = currentConfig.value;
+    boardVersion++;
+    flyingTileId.value = null;
+    loseReason.value = 'tray_full';
     const types = getAvailableTypes(config.tileTypeCount, level.value);
     boardTiles.value = createBoardFromConfig(config, types);
     totalLevelTiles.value = boardTiles.value.length;
@@ -392,8 +415,24 @@ export function useGameState() {
     persistMidLevelState();
   };
 
+  // ─── Tile Flight (#2 Ficha vuela a la bandeja) ─────────────
+  /**
+   * Optional UI animator injected by the view. Receives the tile and the tray
+   * slot index it will land in, and resolves when the flight animation ends.
+   * When no animator is registered (unit tests / headless), selection commits
+   * synchronously.
+   */
+  let tileFlightAnimator: TileFlightAnimator | null = null;
+  const setTileFlightAnimator = (fn: TileFlightAnimator | null) => {
+    tileFlightAnimator = fn;
+  };
+
+  /** Slot index the tile will occupy after the type-sorted insertion. */
+  const getTraySlotIndexFor = (tile: Tile) =>
+    tray.value.filter(t => t.type.localeCompare(tile.type) <= 0).length;
+
   // ─── Tile Selection ────────────────────────────────────────
-  const selectTile = (tile: Tile) => {
+  const selectTile = (tile: Tile): void | Promise<void> => {
     if (isPaused.value) return;
     if (levelIntroBanner.value) {
       dismissLevelIntro();
@@ -419,6 +458,33 @@ export function useGameState() {
 
     playClick();
 
+    if (!tileFlightAnimator) {
+      commitTileToTray(tile);
+      return;
+    }
+
+    // Lock input while the tile flies to its tray slot (~220ms)
+    isAnimating.value = true;
+    flyingTileId.value = tile.id;
+    const boardVersionAtStart = boardVersion;
+    return tileFlightAnimator(tile, getTraySlotIndexFor(tile))
+      .catch(() => {})
+      .then(() => {
+        flyingTileId.value = null;
+        isAnimating.value = false;
+        // Board may have been regenerated (retry / level select) mid-flight
+        if (
+          boardVersion !== boardVersionAtStart ||
+          gameStatus.value !== 'playing' ||
+          !boardTiles.value.some(t => t.id === tile.id)
+        ) {
+          return;
+        }
+        commitTileToTray(tile);
+      });
+  };
+
+  const commitTileToTray = (tile: Tile) => {
     // Record for undo
     moveHistory.value.push({
       tile: { ...tile },
@@ -469,6 +535,9 @@ export function useGameState() {
         }
       }
       matchingTileIds.value = new Set([...matchingTileIds.value, ...popIds]);
+
+      // Ola 3: Match particles burst (fruit + star sprites rising from the trio)
+      matchBurst.value = { id: Date.now() + Math.random(), type: removingType, tileIds: popIds };
 
       setTimeout(() => {
         // Remove the 3 matched tiles
@@ -628,6 +697,7 @@ export function useGameState() {
 
   const checkLoseCondition = () => {
     if (tray.value.length >= MAX_TRAY) {
+      loseReason.value = 'tray_full';
       isTrayFullError.value = true;
       gameStatus.value = 'lost';
       clearMidLevelState();
@@ -642,6 +712,8 @@ export function useGameState() {
       });
       const hasMatch = Object.values(counts).some(c => c >= 3);
       if (!hasMatch) {
+        // Ola 3: Derrota distinta — no tiles left to complete any trio
+        loseReason.value = 'deadlock';
         isTrayFullError.value = true;
         gameStatus.value = 'lost';
         clearMidLevelState();
@@ -786,6 +858,9 @@ export function useGameState() {
     wigglingTileId,
     isAnimating,
     isTrayFullError,
+    loseReason,
+    flyingTileId,
+    matchBurst,
     MAX_TRAY,
     canUseHint,
 
@@ -794,6 +869,7 @@ export function useGameState() {
     levelStarsMap,
     levelIntroBanner,
     dismissLevelIntro,
+    showLevelIntro: triggerLevelIntro,
 
     // Progress & Stats
     totalLevelTiles,
@@ -809,10 +885,12 @@ export function useGameState() {
     gridRows,
     levelName,
     worldName,
+    currentWorldInfo,
 
     // Actions
     generateBoard,
     selectTile,
+    setTileFlightAnimator,
     undoMove,
     shuffleBoard,
     autoMatch,

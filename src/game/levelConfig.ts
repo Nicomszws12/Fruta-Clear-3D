@@ -152,6 +152,30 @@ export function getWorldForLevel(level: number): WorldInfo {
   );
 }
 
+// ─── World Accent Colors (Ola 3: tapete tintado por mundo) ───
+const WORLD_ACCENTS: Record<number, string> = {
+  1: '#16a34a',  // Huerto Soleado — verde
+  2: '#db2777',  // Valle Dulce — rosa
+  3: '#059669',  // Cueva Esmeralda — esmeralda
+  4: '#0891b2',  // Templo de Cristal — cian
+  5: '#ca8a04',  // Fortaleza Dorada — dorado
+  6: '#7c3aed',  // Bosque Mágico — violeta
+  7: '#ea580c',  // Isla Volcánica — naranja
+  8: '#0d9488',  // Oasis Estelar — turquesa
+  9: '#dc2626',  // Palacio del Dragón — rojo
+  10: '#2563eb', // Reino Celestial — azul
+};
+
+const ACCENT_CYCLE = [
+  '#0284c7', '#16a34a', '#db2777', '#ea580c', '#7c3aed',
+  '#0d9488', '#ca8a04', '#dc2626', '#4f46e5', '#059669',
+];
+
+/** Accent color used to tint the board mat for a given world. */
+export function getWorldAccent(worldId: number): string {
+  return WORLD_ACCENTS[worldId] ?? ACCENT_CYCLE[(worldId - 1) % ACCENT_CYCLE.length];
+}
+
 // ─── Shape Mask Generators ────────────────────────────────────
 
 /** Full rectangle mask */

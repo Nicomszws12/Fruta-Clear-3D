@@ -9,6 +9,10 @@ const props = defineProps<{
   gridRows: number;
   hintedTileIds: Set<string>;
   wigglingTileId: string | null;
+  /** #2 Tile currently flying to the tray (hidden on board during flight) */
+  flyingTileId?: string | null;
+  /** Ola 3: World accent color (hex) used to tint the mat border & grid */
+  accentColor?: string;
 }>();
 
 const emit = defineEmits<{
@@ -27,11 +31,25 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
     asset: getAssetByKey(tile.type),
   })),
 );
+
+const hexToRgb = (hex: string): string => {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const num = parseInt(full, 16);
+  if (Number.isNaN(num)) return '2, 132, 199';
+  return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
+};
+
+// Ola 3: Tinted mat per world
+const matStyle = computed(() => ({
+  '--mat-accent': props.accentColor || '#0284c7',
+  '--mat-accent-rgb': hexToRgb(props.accentColor || '#0284c7'),
+}));
 </script>
 
 <template>
   <div class="board-arena" role="region" aria-label="Tablero de juego 3D">
-    <div class="board-mat">
+    <div class="board-mat" :style="matStyle">
       <!-- Decorative Corner Rivets / Stitches -->
       <div class="mat-corner corner-tl" aria-hidden="true">✦</div>
       <div class="mat-corner corner-tr" aria-hidden="true">✦</div>
@@ -45,6 +63,7 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
         <div
           v-for="{ tile, asset } in resolvedTiles"
           :key="tile.id"
+          :data-tile-id="tile.id"
           role="button"
           :tabindex="tile.isBlocked ? -1 : 0"
           :aria-disabled="tile.isBlocked"
@@ -54,6 +73,7 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
             'is-blocked': tile.isBlocked,
             'is-hinted': hintedTileIds.has(tile.id),
             'is-wiggling': wigglingTileId === tile.id,
+            'is-flying': flyingTileId === tile.id,
           }"
           :style="{
             left: `calc(${tile.gridX} * var(--tile-size))`,
@@ -109,17 +129,19 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
   border-radius: 24px;
   padding: 8px 6px;
   box-shadow:
-    0 8px 0 rgba(2, 132, 199, 0.5),
+    0 0 0 3px rgba(var(--mat-accent-rgb, 2, 132, 199), 0.55),
+    0 8px 0 rgba(var(--mat-accent-rgb, 2, 132, 199), 0.5),
     0 18px 28px rgba(0, 0, 0, 0.22);
 
   background-image:
-    linear-gradient(to right, rgba(2, 132, 199, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(2, 132, 199, 0.07) 1px, transparent 1px);
-  background-size: 26px 26px;
+    linear-gradient(to right, rgba(var(--mat-accent-rgb, 2, 132, 199), 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--mat-accent-rgb, 2, 132, 199), 0.09) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 0%, rgba(var(--mat-accent-rgb, 2, 132, 199), 0.10) 0%, transparent 70%);
+  background-size: 26px 26px, 26px 26px, 100% 100%;
 
-  outline: 2px dashed rgba(2, 132, 199, 0.35);
+  outline: 2px dashed rgba(var(--mat-accent-rgb, 2, 132, 199), 0.4);
   outline-offset: -6px;
-  transition: all 0.3s ease;
+  transition: box-shadow 0.4s ease, outline-color 0.4s ease;
   margin: auto;
   max-width: 98vw;
   box-sizing: border-box;
@@ -128,7 +150,7 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
 .mat-corner {
   position: absolute;
   font-size: 13px;
-  color: #0284c7;
+  color: var(--mat-accent, #0284c7);
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -173,6 +195,12 @@ const resolvedTiles = computed<ResolvedTile[]>(() =>
 
 .tile.is-wiggling {
   animation: tileWiggle 0.22s ease;
+}
+
+/* #2 Tile is mid-flight to the tray: the flying clone replaces it visually */
+.tile.is-flying {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .tile-face {

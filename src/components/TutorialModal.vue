@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { playClick, playTap } from '../game/sounds';
+import TutorialMiniBoard from './TutorialMiniBoard.vue';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -12,22 +13,35 @@ const emit = defineEmits<{
 }>();
 
 const currentStep = ref(0);
+const solvedSteps = ref<Set<number>>(new Set());
 
-const STEPS = [
+interface TutorialStep {
+  badge: string;
+  title: string;
+  icon: string;
+  /** Ola 3: interactive practice board instead of the emoji illustration */
+  miniBoard?: 'match' | 'layers';
+  description: string;
+  tip: string;
+}
+
+const STEPS: TutorialStep[] = [
   {
     badge: 'PASO 1 DE 3',
     title: '¡JUNTA 3 IGUALES!',
     icon: '🍓 🍓 🍓',
+    miniBoard: 'match',
     description:
-      'Toca las fichas libres del tablero para bajarlas a tu bandeja. Cuando juntes 3 fichas idénticas, desaparecerán automáticamente y ganarás puntos. ¡Hazlo rápido para activar COMBOS!',
+      'Toca las fichas libres para bajarlas a tu bandeja. 3 iguales desaparecen y ganas puntos. ¡Hazlo rápido para activar COMBOS!',
     tip: '💡 Consejo: La bandeja agrupa las fichas iguales automáticamente.',
   },
   {
     badge: 'PASO 2 DE 3',
     title: 'CAPAS 3D Y CANDADOS',
     icon: '🔓 ⬆️ 🔒',
+    miniBoard: 'layers',
     description:
-      'Las fichas oscuras con candado 🔒 están cubiertas por otras fichas en capas superiores. Quita primero las fichas de arriba para desbloquear las que están debajo.',
+      'Las fichas con candado 🔒 están tapadas. Quita primero las de arriba para liberar las de abajo.',
     tip: '💡 Consejo: Fíjate qué frutas se asoman debajo antes de elegir.',
   },
   {
@@ -43,9 +57,16 @@ const STEPS = [
 watch(
   () => props.isOpen,
   open => {
-    if (open) currentStep.value = 0;
+    if (open) {
+      currentStep.value = 0;
+      solvedSteps.value = new Set();
+    }
   },
 );
+
+const markSolved = (idx: number) => {
+  solvedSteps.value = new Set([...solvedSteps.value, idx]);
+};
 
 const nextStep = () => {
   playTap();
@@ -100,7 +121,17 @@ const finish = () => {
             <div class="step-badge">{{ STEPS[currentStep].badge }}</div>
             <h2 class="step-title">{{ STEPS[currentStep].title }}</h2>
 
-            <div class="step-illustration" aria-hidden="true">
+            <div
+              v-if="STEPS[currentStep].miniBoard"
+              class="step-illustration step-practice"
+            >
+              <TutorialMiniBoard
+                :key="currentStep"
+                :mode="STEPS[currentStep].miniBoard!"
+                @solved="markSolved(currentStep)"
+              />
+            </div>
+            <div v-else class="step-illustration" aria-hidden="true">
               <span>{{ STEPS[currentStep].icon }}</span>
             </div>
 
@@ -132,6 +163,7 @@ const finish = () => {
               <button
                 type="button"
                 class="btn-next"
+                :class="{ 'is-ready': solvedSteps.has(currentStep) }"
                 @click="nextStep"
               >
                 {{ currentStep < STEPS.length - 1 ? 'SIGUIENTE ▶' : '¡EMPEZAR A JUGAR!' }}
@@ -161,6 +193,7 @@ const finish = () => {
   z-index: 10005;
   padding: 16px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .tutorial-card {
@@ -244,6 +277,20 @@ const finish = () => {
   font-size: 2rem;
   margin-bottom: 12px;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.step-illustration.step-practice {
+  padding: 10px 8px 6px;
+  font-size: inherit;
+}
+
+.btn-next.is-ready {
+  animation: readyPulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes readyPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.04); box-shadow: 0 4px 0 #047857, 0 0 14px rgba(16, 185, 129, 0.7); }
 }
 
 .step-box {

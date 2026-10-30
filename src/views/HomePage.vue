@@ -10,7 +10,9 @@ import { useFirebase } from '../composables/useFirebase';
 import { useShop } from '../composables/useShop';
 import { useDailyMissions } from '../composables/useDailyMissions';
 import { getBackgroundById } from '../game/shopCatalog';
-import { playTap, setBackgroundMusicPaused } from '../game/sounds';
+import { getWorldAccent } from '../game/levelConfig';
+import { animateTileFlight } from '../game/tileFlight';
+import { playTap, playClick, setBackgroundMusicPaused } from '../game/sounds';
 import type { PowerUpPackDefinition } from '../game/types';
 import type { ShopTab } from '../components/ShopModal.vue';
 
@@ -21,6 +23,8 @@ import GameBoard from '../components/GameBoard.vue';
 import GameTray from '../components/GameTray.vue';
 import GamePowerUps from '../components/GamePowerUps.vue';
 import GameModalsHost from '../components/GameModalsHost.vue';
+import MatchParticles from '../components/MatchParticles.vue';
+import TitleScreen, { type TitleMode } from '../components/TitleScreen.vue';
 
 // ─── Composables ──────────────────────────────────────────────
 const firebase = useFirebase();
@@ -67,12 +71,16 @@ const {
   wigglingTileId,
   isAnimating,
   isTrayFullError,
+  loseReason,
+  flyingTileId,
+  matchBurst,
   MAX_TRAY,
   canUseHint,
   lastLevelStars,
   levelStarsMap,
   levelIntroBanner,
   dismissLevelIntro,
+  showLevelIntro,
   totalLevelTiles,
   remainingTiles,
   levelProgress,
@@ -82,8 +90,10 @@ const {
   gridCols,
   gridRows,
   worldName,
+  currentWorldInfo,
   generateBoard,
   selectTile,
+  setTileFlightAnimator,
   undoMove,
   shuffleBoard,
   autoMatch,
@@ -97,6 +107,10 @@ const {
 } = useGameState();
 
 // ─── Dialog & Modal States ────────────────────────────────────
+// Ola 2: Title / Home hub shown before the board (flag, no extra route)
+const isOnTitle = ref(true);
+const titleMode = ref<TitleMode>('loading');
+
 const isWelcomeOpen = ref(false);
 const isWinOpen = ref(false);
 const isLoseOpen = ref(false);
@@ -111,6 +125,7 @@ const isMissionsOpen = ref(false);
 
 const isAnyOverlayOpen = computed(
   () =>
+    isOnTitle.value ||
     isWelcomeOpen.value ||
     isWinOpen.value ||
     isLoseOpen.value ||
@@ -128,12 +143,51 @@ watch(isAnyOverlayOpen, open => {
   else resumeGame();
 });
 
+// ─── Title / Home Hub (Ola 2) & World Accent (Ola 3) ─────────
+const worldAccent = computed(() => {
+  const bg = getBackgroundById(activeBackground.value);
+  if (bg && activeBackground.value !== 'default_blue') {
+    return bg.accentColor;
+  }
+  return getWorldAccent(currentWorldInfo.value.id);
+});
+const totalStars = computed(() =>
+  Object.values(levelStarsMap.value).reduce((acc, n) => acc + (Number(n) || 0), 0),
+);
+
+const hasLevelInProgress = () =>
+  gameStatus.value === 'playing' &&
+  boardTiles.value.length > 0 &&
+  (tray.value.length > 0 || totalLevelTiles.value - remainingTiles.value > 0);
+
+const handleTitlePlay = () => {
+  // First user gesture: unlocks Web Audio on iOS / Android
+  playClick();
+  if (titleMode.value === 'new') {
+    isWelcomeOpen.value = true;
+    return;
+  }
+  isOnTitle.value = false;
+  showLevelIntro();
+};
+
+const goToTitle = () => {
+  playTap();
+  persistMidLevelState();
+  titleMode.value = hasLevelInProgress() ? 'resume' : 'continue';
+  isOnTitle.value = true;
+  isPauseOpen.value = false;
+};
+
 // ─── Overlay & Gameplay Handlers ──────────────────────────────
 const handleWelcomeSubmit = async (name: string) => {
   isWelcomeOpen.value = false;
   await registerNewUser(name);
-  generateBoard();
-  if (!tutorialCompleted.value) {
+  isOnTitle.value = false;
+  titleMode.value = 'continue';
+  const needsTutorial = !tutorialCompleted.value;
+  generateBoard(!needsTutorial);
+  if (needsTutorial) {
     isTutorialOpen.value = true;
   }
 };
@@ -141,6 +195,9 @@ const handleWelcomeSubmit = async (name: string) => {
 const handleTutorialComplete = () => {
   markTutorialCompleted();
   isTutorialOpen.value = false;
+  if (!isOnTitle.value) {
+    showLevelIntro();
+  }
 };
 
 const handleNextLevel = () => {
@@ -187,6 +244,8 @@ const handleSelectLevel = (lvl: number) => {
   level.value = lvl;
   score.value = 0;
   shop.initializeSkin();
+  isOnTitle.value = false;
+  titleMode.value = 'continue';
   generateBoard();
 };
 
@@ -211,9 +270,9 @@ watch(gameStatus, async status => {
 });
 
 // ─── Dynamic Background ──────────────────────────────────────
-const dynamicBgStyle = computed(() => {
+const dynamicBgStyle = computed<Record<string, string>>(() => {
   const bg = getBackgroundById(activeBackground.value);
-  if (!bg) return {};
+  if (!bg) return {} as Record<string, string>;
   return {
     background: `
       radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, 0.22) 0%, transparent 65%),
@@ -252,7 +311,9 @@ const setupNativePlugins = async () => {
       else if (isLeaderboardOpen.value) isLeaderboardOpen.value = false;
       else if (isSettingsOpen.value) isSettingsOpen.value = false;
       else if (isPauseOpen.value) isPauseOpen.value = false;
-      else if (gameStatus.value === 'playing' && !isWelcomeOpen.value) isPauseOpen.value = true;
+      else if (isWelcomeOpen.value) isWelcomeOpen.value = false;
+      else if (isOnTitle.value) CapApp.minimizeApp().catch(() => {});
+      else if (gameStatus.value === 'playing') isPauseOpen.value = true;
     });
 
     appStateListener = await CapApp.addListener('appStateChange', ({ isActive }) => {
@@ -264,6 +325,9 @@ const setupNativePlugins = async () => {
 
 onMounted(async () => {
   setupNativePlugins();
+  // #2 Tile flies from the board to its tray slot before being committed
+  setTileFlightAnimator(animateTileFlight);
+
   const cached = getLocalSave();
   if (cached && typeof cached.currentLevel === 'number' && cached.currentLevel > 1) {
     level.value = cached.currentLevel;
@@ -272,18 +336,22 @@ onMounted(async () => {
 
   const result = await authenticateAndLoadProfile();
   if (result?.isNewUser) {
-    isWelcomeOpen.value = true;
+    // Ola 2: first time → title says "¡Jugar!" → nickname → tutorial
+    titleMode.value = 'new';
     return;
   }
   if (result) {
     level.value = result.savedLevel;
   }
   shop.initializeSkin();
+  // Prepare the board behind the title screen (intro plays on "Continuar")
   const restored = await restoreMidLevelState(level.value);
-  if (!restored) generateBoard();
+  if (!restored) generateBoard(false);
+  titleMode.value = restored && hasLevelInProgress() ? 'resume' : 'continue';
 });
 
 onUnmounted(() => {
+  setTileFlightAnimator(null);
   backButtonListener?.remove();
   appStateListener?.remove();
 });
@@ -329,6 +397,8 @@ onUnmounted(() => {
           :grid-rows="gridRows"
           :hinted-tile-ids="hintedTileIds"
           :wiggling-tile-id="wigglingTileId"
+          :flying-tile-id="flyingTileId"
+          :accent-color="worldAccent"
           @select-tile="selectTile"
         />
 
@@ -351,10 +421,34 @@ onUnmounted(() => {
             :is-tray-critical="isTrayCritical"
             :matching-tile-ids="matchingTileIds"
             :is-tray-full-error="isTrayFullError"
+            :lose-reason="loseReason"
           />
         </div>
       </div>
     </ion-content>
+
+    <!-- Ola 3: Match particles (fruit + Kenney stars rising from the trio) -->
+    <MatchParticles :burst="matchBurst" />
+
+    <!-- Ola 2: Home hub / title screen -->
+    <TitleScreen
+      :is-open="isOnTitle"
+      :mode="titleMode"
+      :username="username"
+      :level="level"
+      :world-name="currentWorldInfo.name"
+      :world-icon="currentWorldInfo.icon"
+      :user-coins="userCoins"
+      :unclaimed-missions-count="dailyMissions.unclaimedCount.value"
+      :total-stars="totalStars"
+      :bg-style="dynamicBgStyle"
+      @play="handleTitlePlay"
+      @open-map="playTap(); isMapOpen = true"
+      @open-shop="openShop('skins')"
+      @open-leaderboard="openLeaderboard"
+      @open-settings="playTap(); isSettingsOpen = true"
+      @open-missions="playTap(); isMissionsOpen = true"
+    />
 
     <GameModalsHost
       :is-welcome-open="isWelcomeOpen"
@@ -374,6 +468,7 @@ onUnmounted(() => {
       :last-level-stars="lastLevelStars"
       :level-stars-map="levelStarsMap"
       :last-coins-earned="lastCoinsEarned"
+      :lose-reason="loseReason"
       :unclaimed-missions-count="dailyMissions.unclaimedCount.value"
       :username="username"
       :user-uid="userUid"
@@ -407,6 +502,7 @@ onUnmounted(() => {
       @next-level="handleNextLevel"
       @retry-level="handleRetryLevel"
       @resume-pause="playTap(); isPauseOpen = false"
+      @open-home="goToTitle"
       @open-tutorial="isPauseOpen = false; isSettingsOpen = false; isTutorialOpen = true"
       @open-map-from-pause="isPauseOpen = false; isMapOpen = true"
       @open-missions-from-pause="isPauseOpen = false; isMissionsOpen = true"
